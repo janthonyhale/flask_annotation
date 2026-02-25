@@ -13,10 +13,13 @@ DB_PATH = os.path.join(DATA_DIR, "annotations.db")
 SEGMENT_SECONDS = 60  # 1-minute segments
 
 # --- Configure your video pool here ---
-# Put MP4s in static/videos/
+# Prefer hosted video URLs (e.g., Google Drive direct-download links).
+# If you still want local files, set "path" to a file under static/.
 VIDEO_POOL = [
-    {"video_id": "sample_001", "path": "videos/sample.mp4"},
-    # {"video_id": "dlg002", "path": "videos/dlg002.mp4"},
+    {
+        "video_id": "sample_001",
+        "url": "https://drive.google.com/uc?export=download&id=YOUR_FILE_ID",
+    },
 ]
 
 # Emotions: edit to match your self-report instrument
@@ -80,7 +83,10 @@ def create_app():
     @app.post("/start")
     def start():
         # Create a participant session
-        participant_id = str(uuid.uuid4())
+        participant_id = request.form.get("participant_id", "").strip()
+        if not participant_id:
+            abort(400, "Unique ID is required")
+
         assignment = random.choice(VIDEO_POOL)
 
         # Randomly choose target side: left/right
@@ -93,7 +99,7 @@ def create_app():
         session["participant_id"] = participant_id
         session["run_id"] = run_id
         session["video_id"] = assignment["video_id"]
-        session["video_path"] = assignment["path"]
+        session["video_url"] = resolve_video_source(assignment)
         session["target_side"] = target_side
 
         # These will be set once browser reads video metadata
@@ -153,7 +159,7 @@ def create_app():
 
         return render_template(
             "task.html",
-            video_path=url_for("static", filename=session["video_path"]),
+            video_url=session["video_url"],
             target_side=session["target_side"],
             segment_idx=segment_idx,
             n_segments=n_segments,
@@ -208,7 +214,7 @@ def create_app():
             # Re-render with an error
             return render_template(
                 "task.html",
-                video_path=url_for("static", filename=session["video_path"]),
+                video_url=session["video_url"],
                 target_side=session["target_side"],
                 segment_idx=segment_idx,
                 n_segments=session.get("n_segments"),
@@ -345,6 +351,14 @@ def create_app():
         return Response(out.getvalue(), mimetype="text/csv")
 
     return app
+
+
+def resolve_video_source(assignment: dict) -> str:
+    if assignment.get("url"):
+        return assignment["url"]
+    if assignment.get("path"):
+        return url_for("static", filename=assignment["path"])
+    abort(500, "Invalid VIDEO_POOL entry: expected 'url' or 'path'.")
 
 
 # ----------------- Helpers -----------------

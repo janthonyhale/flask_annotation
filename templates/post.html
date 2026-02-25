@@ -19,16 +19,13 @@
 
     <form method="post">
       <h2>Overall emotions (entire dialogue)</h2>
-      <div class="grid">
+      <div class="slider-grid">
         {% for e in emotions %}
-          <div class="q">
-            <label>{{ e }}</label>
-            <select name="overall_{{ (e|lower)|replace('/','_')|replace(' ','_')|replace('-','_') }}" required>
-              <option value="" selected disabled>Choose…</option>
-              {% for i in range(1,8) %}
-                <option value="{{ i }}">{{ i }}</option>
-              {% endfor %}
-            </select>
+          {% set key = (e|lower)|replace('/','_')|replace(' ','_')|replace('-','_') %}
+          <div class="q slider-q">
+            <label for="overall_{{ key }}">{{ e }}: <span id="val_overall_{{ key }}">4</span></label>
+            <input id="overall_{{ key }}" type="range" min="1" max="7" step="1" value="4"
+                   name="overall_{{ key }}" class="rating-slider" data-value-id="val_overall_{{ key }}" required>
             <div class="hint">1 = Not at all, 7 = Extremely</div>
           </div>
         {% endfor %}
@@ -48,14 +45,10 @@
 
       <h2>SVI (single items)</h2>
       {% for key, label in svi_facets %}
-        <div class="q">
-          <label>{{ label }}</label>
-          <select name="{{ key }}" required>
-            <option value="" selected disabled>Choose…</option>
-            {% for i in range(1,8) %}
-              <option value="{{ i }}">{{ i }}</option>
-            {% endfor %}
-          </select>
+        <div class="q slider-q">
+          <label for="{{ key }}">{{ label }}: <span id="val_{{ key }}">4</span></label>
+          <input id="{{ key }}" type="range" min="1" max="7" step="1" value="4"
+                 name="{{ key }}" class="rating-slider" data-value-id="val_{{ key }}" required>
           <div class="hint">1 = Not at all satisfied, 7 = Extremely satisfied</div>
         </div>
       {% endfor %}
@@ -63,5 +56,15 @@
       <button class="btn" type="submit">Finish & Get Code</button>
     </form>
   </div>
+
+  <script>
+    document.querySelectorAll('.rating-slider').forEach((slider) => {
+      const valueId = slider.dataset.valueId;
+      const out = document.getElementById(valueId);
+      slider.addEventListener('input', () => {
+        out.textContent = slider.value;
+      });
+    });
+  </script>
 </body>
 </html>

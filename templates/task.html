@@ -70,7 +70,6 @@
   const form = document.getElementById("segmentForm");
   const continueBtn = document.getElementById("continueBtn");
   const status = document.getElementById("segmentStatus");
-  const endTimeLabel = document.getElementById("endTimeLabel");
 
   let initialized = false;
   let segmentStart = segmentIdx * SEGMENT_SECONDS;
@@ -104,6 +103,10 @@
     fd.append("duration_sec", vid.duration);
     await fetch("{{ url_for('init_video') }}", { method: "POST", body: fd });
   }
+
+  // Make it obvious we require a click
+  continueBtn.disabled = true;
+  vid.controls = false;
 
   vid.addEventListener("loadedmetadata", async () => {
     if (initialized) return;

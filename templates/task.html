@@ -6,56 +6,60 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
 </head>
 <body>
-  <div class="container wide">
+  <div class="container widest">
     <h1>Segment {{ segment_idx + 1 }}{% if n_segments %} / {{ n_segments }}{% endif %}</h1>
 
     <div class="instructions">
       <strong>Important:</strong> You will see both people. <u>Only rate emotions for the person inside the red box</u>.
+      You cannot skip around in the video during playback.
     </div>
 
     {% if error %}
       <div class="error">{{ error }}</div>
     {% endif %}
 
-    <div class="video-wrap">
-      <video id="vid" controls preload="metadata" playsinline>
-        <source src="{{ video_path }}" type="video/mp4">
-        Your browser does not support the video tag.
-      </video>
+    <div class="task-layout">
+      <div class="task-video-col">
+        <div class="video-wrap">
+          <video id="vid" controls preload="metadata" playsinline controlsList="nodownload noplaybackrate" disablePictureInPicture>
+            <source src="{{ video_path }}">
+            Your browser does not support the video tag.
+          </video>
 
-      <!-- Overlay highlight: red box over the target half -->
-      <div id="highlight" class="highlight {{ target_side }}"></div>
-    </div>
+          <div id="highlight" class="highlight {{ target_side }}"></div>
+        </div>
 
-    <div class="segment-status" id="segmentStatus">
-      This segment will pause automatically at <span id="endTimeLabel"></span>.
-    </div>
-
-    <form id="segmentForm" method="post" action="{{ url_for('submit_segment') }}">
-      <input type="hidden" name="segment_idx" value="{{ segment_idx }}">
-
-      <h2>Rate the highlighted person’s emotions in the <em>most recent 1-minute segment</em></h2>
-
-      <div class="grid">
-        {% for e in emotions %}
-          <div class="q">
-            <label>{{ e }}</label>
-            <select name="emo_{{ (e|lower)|replace('/','_')|replace(' ','_')|replace('-','_') }}" required>
-              <option value="" selected disabled>Choose…</option>
-              {% for i in range(1,8) %}
-                <option value="{{ i }}">{{ i }}</option>
-              {% endfor %}
-            </select>
-            <div class="hint">1 = Not at all, 7 = Extremely</div>
-          </div>
-        {% endfor %}
+        <div class="segment-status" id="segmentStatus">
+          This segment will pause automatically at <span id="endTimeLabel"></span>.
+        </div>
       </div>
 
-      <label>Open-ended (optional): What happened emotionally in this segment?</label>
-      <textarea name="open_text" rows="3" placeholder="Optional notes..."></textarea>
+      <div class="task-form-col">
+        <form id="segmentForm" method="post" action="{{ url_for('submit_segment') }}">
+          <input type="hidden" name="segment_idx" value="{{ segment_idx }}">
 
-      <button id="continueBtn" class="btn" type="submit" disabled>Continue to Next Segment</button>
-    </form>
+          <h2>Rate the highlighted person’s emotions in the <em>most recent 1-minute segment</em></h2>
+
+          <div class="slider-grid">
+            {% for e in emotions %}
+              {% set key = (e|lower)|replace('/','_')|replace(' ','_')|replace('-','_') %}
+              <div class="q slider-q">
+                <label for="emo_{{ key }}">{{ e }}: <span id="val_emo_{{ key }}">4</span></label>
+                <input id="emo_{{ key }}" type="range" min="1" max="7" step="1" value="4"
+                       name="emo_{{ key }}" class="rating-slider" data-value-id="val_emo_{{ key }}" data-touch-id="touch_emo_{{ key }}" required>
+                <input type="hidden" id="touch_emo_{{ key }}" name="touch_emo_{{ key }}" value="0">
+                <div class="hint">1 = Not at all, 7 = Extremely</div>
+              </div>
+            {% endfor %}
+          </div>
+
+          <label>Open-ended (optional): What happened emotionally in this segment?</label>
+          <textarea name="open_text" rows="3" placeholder="Optional notes..."></textarea>
+
+          <button id="continueBtn" class="btn" type="submit" disabled>Continue to Next Segment</button>
+        </form>
+      </div>
+    </div>
   </div>
 
 <script>
@@ -63,6 +67,7 @@
   const SEGMENT_SECONDS = {{ segment_seconds|int }};
   const segmentIdx = {{ segment_idx|int }};
   const vid = document.getElementById("vid");
+  const form = document.getElementById("segmentForm");
   const continueBtn = document.getElementById("continueBtn");
   const status = document.getElementById("segmentStatus");
   const endTimeLabel = document.getElementById("endTimeLabel");
@@ -70,6 +75,9 @@
   let initialized = false;
   let segmentStart = segmentIdx * SEGMENT_SECONDS;
   let segmentEnd = (segmentIdx + 1) * SEGMENT_SECONDS;
+  let programmaticSeek = false;
+  let lockTime = segmentStart;
+  let segmentFinished = false;
 
   function fmt(t){
     const m = Math.floor(t/60);
@@ -77,13 +85,21 @@
     return `${m}:${String(s).padStart(2,'0')}`;
   }
 
-  function enableForm(){
-    continueBtn.disabled = false;
-    status.innerHTML = "Segment finished. Please answer the questions to continue.";
+  function allSlidersMoved(){
+    return Array.from(document.querySelectorAll('input[type="hidden"][id^="touch_emo_"]')).every((x) => x.value === "1");
+  }
+
+  function maybeEnableForm(){
+    if (segmentFinished && allSlidersMoved()) {
+      continueBtn.disabled = false;
+      status.innerHTML = "Segment finished and all sliders moved. You can continue.";
+    } else if (segmentFinished) {
+      continueBtn.disabled = true;
+      status.innerHTML = "Segment finished. Move every slider at least once before continuing.";
+    }
   }
 
   async function initVideoMetadata(){
-    // Call server once to store duration and n_segments
     const fd = new FormData();
     fd.append("duration_sec", vid.duration);
     await fetch("{{ url_for('init_video') }}", { method: "POST", body: fd });
@@ -93,32 +109,74 @@
     if (initialized) return;
     initialized = true;
 
-    // If last segment would exceed duration, clamp end
     if (segmentEnd > vid.duration) segmentEnd = vid.duration;
-
     endTimeLabel.textContent = fmt(segmentEnd);
-
-    // Save metadata to server (n_segments)
     await initVideoMetadata();
 
-    // Seek to segment start
+    programmaticSeek = true;
     vid.currentTime = segmentStart;
+    lockTime = segmentStart;
     vid.pause();
+    setTimeout(() => { programmaticSeek = false; }, 0);
 
-    // Disable continue until auto-pause happens
     continueBtn.disabled = true;
-    status.innerHTML = `Click play. The video will pause automatically at ${fmt(segmentEnd)}.`;
+    status.innerHTML = `Click play. The video will pause automatically at ${fmt(segmentEnd)}. Seeking is disabled.`;
   });
 
   vid.addEventListener("timeupdate", () => {
     if (!initialized) return;
-    if (vid.currentTime >= segmentEnd - 0.05) {
+    if (!segmentFinished) {
+      lockTime = Math.max(lockTime, vid.currentTime);
+    }
+
+    if (vid.currentTime >= segmentEnd - 0.05 && !segmentFinished) {
+      segmentFinished = true;
       vid.pause();
-      vid.currentTime = segmentEnd; // snap
-      enableForm();
+      programmaticSeek = true;
+      vid.currentTime = segmentEnd;
+      lockTime = segmentEnd;
+      setTimeout(() => { programmaticSeek = false; }, 0);
+      maybeEnableForm();
     }
   });
 
+  vid.addEventListener("seeking", () => {
+    if (!initialized || programmaticSeek) return;
+
+    // Disallow scrubbing/skip after start. Keep playback pinned to latest allowed point.
+    if (Math.abs(vid.currentTime - lockTime) > 0.1) {
+      programmaticSeek = true;
+      vid.currentTime = lockTime;
+      setTimeout(() => { programmaticSeek = false; }, 0);
+    }
+  });
+
+  vid.addEventListener("error", () => {
+    const mediaError = vid.error;
+    let detail = "unknown video error";
+    if (mediaError && mediaError.code === 4) detail = "the source could not be loaded as playable media";
+    if (mediaError && mediaError.code === 3) detail = "media decoding failed";
+    status.innerHTML = `Video failed to load (${detail}). Please verify the video file exists and is a valid media format.`;
+  });
+
+  document.querySelectorAll('.rating-slider').forEach((slider) => {
+    const valueId = slider.dataset.valueId;
+    const touchId = slider.dataset.touchId;
+    const out = document.getElementById(valueId);
+    const touch = document.getElementById(touchId);
+    slider.addEventListener('input', () => {
+      out.textContent = slider.value;
+      touch.value = "1";
+      maybeEnableForm();
+    });
+  });
+
+  form.addEventListener('submit', (ev) => {
+    if (!segmentFinished || !allSlidersMoved()) {
+      ev.preventDefault();
+      maybeEnableForm();
+    }
+  });
 })();
 </script>
 

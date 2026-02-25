@@ -6,7 +6,7 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
 </head>
 <body>
-  <div class="container wide">
+  <div class="container widest">
     <h1>Segment {{ segment_idx + 1 }}{% if n_segments %} / {{ n_segments }}{% endif %}</h1>
 
     <div class="instructions">
@@ -17,45 +17,47 @@
       <div class="error">{{ error }}</div>
     {% endif %}
 
-    <div class="video-wrap">
-      <video id="vid" controls preload="metadata" playsinline>
-        <source src="{{ video_path }}" type="video/mp4">
-        Your browser does not support the video tag.
-      </video>
+    <div class="task-layout">
+      <div class="task-video-col">
+        <div class="video-wrap">
+          <video id="vid" controls preload="metadata" playsinline>
+            <source src="{{ video_url }}" type="video/mp4">
+            Your browser does not support the video tag.
+          </video>
 
-      <!-- Overlay highlight: red box over the target half -->
-      <div id="highlight" class="highlight {{ target_side }}"></div>
-    </div>
+          <div id="highlight" class="highlight {{ target_side }}"></div>
+        </div>
 
-    <div class="segment-status" id="segmentStatus">
-      This segment will pause automatically at <span id="endTimeLabel"></span>.
-    </div>
-
-    <form id="segmentForm" method="post" action="{{ url_for('submit_segment') }}">
-      <input type="hidden" name="segment_idx" value="{{ segment_idx }}">
-
-      <h2>Rate the highlighted person’s emotions in the <em>most recent 1-minute segment</em></h2>
-
-      <div class="grid">
-        {% for e in emotions %}
-          <div class="q">
-            <label>{{ e }}</label>
-            <select name="emo_{{ (e|lower)|replace('/','_')|replace(' ','_')|replace('-','_') }}" required>
-              <option value="" selected disabled>Choose…</option>
-              {% for i in range(1,8) %}
-                <option value="{{ i }}">{{ i }}</option>
-              {% endfor %}
-            </select>
-            <div class="hint">1 = Not at all, 7 = Extremely</div>
-          </div>
-        {% endfor %}
+        <div class="segment-status" id="segmentStatus">
+          This segment will pause automatically at <span id="endTimeLabel"></span>.
+        </div>
       </div>
 
-      <label>Open-ended (optional): What happened emotionally in this segment?</label>
-      <textarea name="open_text" rows="3" placeholder="Optional notes..."></textarea>
+      <div class="task-form-col">
+        <form id="segmentForm" method="post" action="{{ url_for('submit_segment') }}">
+          <input type="hidden" name="segment_idx" value="{{ segment_idx }}">
 
-      <button id="continueBtn" class="btn" type="submit" disabled>Continue to Next Segment</button>
-    </form>
+          <h2>Rate the highlighted person’s emotions in the <em>most recent 1-minute segment</em></h2>
+
+          <div class="slider-grid">
+            {% for e in emotions %}
+              {% set key = (e|lower)|replace('/','_')|replace(' ','_')|replace('-','_') %}
+              <div class="q slider-q">
+                <label for="emo_{{ key }}">{{ e }}: <span id="val_emo_{{ key }}">4</span></label>
+                <input id="emo_{{ key }}" type="range" min="1" max="7" step="1" value="4"
+                       name="emo_{{ key }}" class="rating-slider" data-value-id="val_emo_{{ key }}" required>
+                <div class="hint">1 = Not at all, 7 = Extremely</div>
+              </div>
+            {% endfor %}
+          </div>
+
+          <label>Open-ended (optional): What happened emotionally in this segment?</label>
+          <textarea name="open_text" rows="3" placeholder="Optional notes..."></textarea>
+
+          <button id="continueBtn" class="btn" type="submit" disabled>Continue to Next Segment</button>
+        </form>
+      </div>
+    </div>
   </div>
 
 <script>
@@ -83,7 +85,6 @@
   }
 
   async function initVideoMetadata(){
-    // Call server once to store duration and n_segments
     const fd = new FormData();
     fd.append("duration_sec", vid.duration);
     await fetch("{{ url_for('init_video') }}", { method: "POST", body: fd });
@@ -93,19 +94,15 @@
     if (initialized) return;
     initialized = true;
 
-    // If last segment would exceed duration, clamp end
     if (segmentEnd > vid.duration) segmentEnd = vid.duration;
 
     endTimeLabel.textContent = fmt(segmentEnd);
 
-    // Save metadata to server (n_segments)
     await initVideoMetadata();
 
-    // Seek to segment start
     vid.currentTime = segmentStart;
     vid.pause();
 
-    // Disable continue until auto-pause happens
     continueBtn.disabled = true;
     status.innerHTML = `Click play. The video will pause automatically at ${fmt(segmentEnd)}.`;
   });
@@ -114,11 +111,26 @@
     if (!initialized) return;
     if (vid.currentTime >= segmentEnd - 0.05) {
       vid.pause();
-      vid.currentTime = segmentEnd; // snap
+      vid.currentTime = segmentEnd;
       enableForm();
     }
   });
 
+  vid.addEventListener("error", () => {
+    const mediaError = vid.error;
+    let detail = "unknown video error";
+    if (mediaError && mediaError.code === 4) detail = "the source could not be loaded as playable media";
+    if (mediaError && mediaError.code === 3) detail = "media decoding failed";
+    status.innerHTML = `Video failed to load (${detail}). This is usually a Google Drive permission or link-format issue.`;
+  });
+
+  document.querySelectorAll('.rating-slider').forEach((slider) => {
+    const valueId = slider.dataset.valueId;
+    const out = document.getElementById(valueId);
+    slider.addEventListener('input', () => {
+      out.textContent = slider.value;
+    });
+  });
 })();
 </script>
 

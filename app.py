@@ -4,10 +4,14 @@ import uuid
 import random
 import sqlite3
 from datetime import datetime
+<<<<<<< codex/update-annotation-task-layout-and-features-w24wgg
+from urllib.parse import urlparse, parse_qs, unquote
+=======
 <<<<<<< codex/update-annotation-task-layout-and-features-hautjr
 from urllib.parse import urlparse, parse_qs, unquote
 =======
 from urllib.parse import urlparse, parse_qs
+>>>>>>> main
 >>>>>>> main
 from flask import Flask, render_template, request, redirect, url_for, session, g, abort
 
@@ -164,11 +168,21 @@ def create_app():
                 error="Please enter an age between 18 and 120.",
             )
 
+<<<<<<< codex/update-annotation-task-layout-and-features-w24wgg
+        grew_up_state = request.form.get("grew_up_state", "").strip()
+=======
+>>>>>>> main
         payload = {
             "age": age,
             "gender": request.form.get("gender", "").strip(),
             "grew_up_region": request.form.get("grew_up_region", "").strip(),
+<<<<<<< codex/update-annotation-task-layout-and-features-w24wgg
+            "grew_up_state": grew_up_state,
+            # Backward-compatible alias for previous exports/consumers
+            "grew_up_detail": grew_up_state,
+=======
             "grew_up_state": request.form.get("grew_up_state", "").strip(),
+>>>>>>> main
             "native_language": request.form.get("native_language", "").strip(),
         }
 
@@ -294,9 +308,16 @@ def create_app():
                 error="Please answer all overall emotion ratings.",
             )
 
+        origin_state = request.form.get("origin_state", "").strip()
         origin_guess = {
             "origin_region": request.form.get("origin_region", "").strip(),
+<<<<<<< codex/update-annotation-task-layout-and-features-w24wgg
+            "origin_state": origin_state,
+            # Backward-compatible alias for previous exports/consumers
+            "origin_detail": origin_state,
+=======
             "origin_state": request.form.get("origin_state", "").strip(),
+>>>>>>> main
         }
 
         svi = {}
@@ -382,18 +403,27 @@ def resolve_video_source(assignment: dict) -> str:
 
 
 def normalize_google_drive_url(url: str) -> str:
+<<<<<<< codex/update-annotation-task-layout-and-features-w24wgg
+=======
 <<<<<<< codex/update-annotation-task-layout-and-features-hautjr
+>>>>>>> main
     """
     Convert common Google Drive sharing URLs into a more video-player-friendly direct URL.
     We preserve resource keys when present, since some files require them.
     """
+<<<<<<< codex/update-annotation-task-layout-and-features-w24wgg
 =======
+=======
+>>>>>>> main
 >>>>>>> main
     parsed = urlparse(url)
     if "drive.google.com" not in parsed.netloc:
         return url
 
+<<<<<<< codex/update-annotation-task-layout-and-features-w24wgg
+=======
 <<<<<<< codex/update-annotation-task-layout-and-features-hautjr
+>>>>>>> main
     query = parse_qs(parsed.query)
 
     # /file/d/<id>/view?resourcekey=...
@@ -419,6 +449,8 @@ def normalize_google_drive_url(url: str) -> str:
         base += f"&resourcekey={resource_key[0]}"
 
     return base
+<<<<<<< codex/update-annotation-task-layout-and-features-w24wgg
+=======
 =======
     path_parts = [p for p in parsed.path.split("/") if p]
     if "file" in path_parts and "d" in path_parts:
@@ -432,6 +464,7 @@ def normalize_google_drive_url(url: str) -> str:
         return f"https://drive.google.com/uc?export=download&id={query_id[0]}"
 
     return url
+>>>>>>> main
 >>>>>>> main
 
 

@@ -31,9 +31,12 @@
         <div class="segment-status" id="segmentStatus">
           This segment will pause automatically at <span id="endTimeLabel"></span>.
         </div>
+<<<<<<< codex/update-annotation-task-layout-and-features-w24wgg
+=======
 <<<<<<< codex/update-annotation-task-layout-and-features-hautjr
         <div class="hint" id="videoDebug">Video source: {{ video_url }}</div>
 =======
+>>>>>>> main
 >>>>>>> main
       </div>
 
@@ -120,7 +123,10 @@
     }
   });
 
+<<<<<<< codex/update-annotation-task-layout-and-features-w24wgg
+=======
 <<<<<<< codex/update-annotation-task-layout-and-features-hautjr
+>>>>>>> main
   vid.addEventListener("error", () => {
     const mediaError = vid.error;
     let detail = "unknown video error";
@@ -129,6 +135,8 @@
     status.innerHTML = `Video failed to load (${detail}). This is usually a Google Drive permission or link-format issue.`;
   });
 
+<<<<<<< codex/update-annotation-task-layout-and-features-w24wgg
+=======
   setTimeout(() => {
     if (!initialized && vid.readyState === 0) {
       status.innerHTML = "Still waiting for video metadata. If this persists, the Drive link likely is not streamable to the browser.";
@@ -136,6 +144,7 @@
   }, 5000);
 
 =======
+>>>>>>> main
 >>>>>>> main
   document.querySelectorAll('.rating-slider').forEach((slider) => {
     const valueId = slider.dataset.valueId;

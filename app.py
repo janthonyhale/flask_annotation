@@ -4,7 +4,11 @@ import uuid
 import random
 import sqlite3
 from datetime import datetime
+<<<<<<< codex/update-annotation-task-layout-and-features-hautjr
+from urllib.parse import urlparse, parse_qs, unquote
+=======
 from urllib.parse import urlparse, parse_qs
+>>>>>>> main
 from flask import Flask, render_template, request, redirect, url_for, session, g, abort
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -378,10 +382,44 @@ def resolve_video_source(assignment: dict) -> str:
 
 
 def normalize_google_drive_url(url: str) -> str:
+<<<<<<< codex/update-annotation-task-layout-and-features-hautjr
+    """
+    Convert common Google Drive sharing URLs into a more video-player-friendly direct URL.
+    We preserve resource keys when present, since some files require them.
+    """
+=======
+>>>>>>> main
     parsed = urlparse(url)
     if "drive.google.com" not in parsed.netloc:
         return url
 
+<<<<<<< codex/update-annotation-task-layout-and-features-hautjr
+    query = parse_qs(parsed.query)
+
+    # /file/d/<id>/view?resourcekey=...
+    path_parts = [p for p in parsed.path.split("/") if p]
+    file_id = None
+    if "file" in path_parts and "d" in path_parts:
+        d_idx = path_parts.index("d")
+        if d_idx + 1 < len(path_parts):
+            file_id = unquote(path_parts[d_idx + 1])
+
+    # /open?id=<id> or /uc?id=<id>
+    if file_id is None:
+        query_id = query.get("id", [])
+        if query_id:
+            file_id = query_id[0]
+
+    if not file_id:
+        return url
+
+    base = f"https://drive.google.com/uc?export=download&id={file_id}&confirm=t"
+    resource_key = query.get("resourcekey", [])
+    if resource_key:
+        base += f"&resourcekey={resource_key[0]}"
+
+    return base
+=======
     path_parts = [p for p in parsed.path.split("/") if p]
     if "file" in path_parts and "d" in path_parts:
         d_idx = path_parts.index("d")
@@ -394,6 +432,7 @@ def normalize_google_drive_url(url: str) -> str:
         return f"https://drive.google.com/uc?export=download&id={query_id[0]}"
 
     return url
+>>>>>>> main
 
 
 # ----------------- Helpers -----------------

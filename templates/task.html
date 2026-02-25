@@ -20,17 +20,23 @@
     <div class="task-layout">
       <div class="task-video-col">
         <div class="video-wrap">
-          <video id="vid" controls preload="metadata" playsinline>
-            <source src="{{ video_path }}" type="video/mp4">
+          <!-- IMPORTANT: use video_url (what Flask passes) -->
+          <video id="vid" preload="metadata" playsinline>
+            <source src="{{ video_url }}" type="video/mp4">
             Your browser does not support the video tag.
           </video>
 
           <div id="highlight" class="highlight {{ target_side }}"></div>
         </div>
 
-        <div class="segment-status" id="segmentStatus">
-          This segment will pause automatically at <span id="endTimeLabel"></span>.
+        <div class="video-controls">
+          <button id="startSegmentBtn" class="btn" type="button">Start Segment</button>
         </div>
+
+        <div class="segment-status" id="segmentStatus">
+          Segment not started.
+        </div>
+
         <div class="hint" id="videoDebug">Video source: {{ video_url }}</div>
       </div>
 
@@ -66,9 +72,9 @@
   const SEGMENT_SECONDS = {{ segment_seconds|int }};
   const segmentIdx = {{ segment_idx|int }};
   const vid = document.getElementById("vid");
+  const startBtn = document.getElementById("startSegmentBtn");
   const continueBtn = document.getElementById("continueBtn");
   const status = document.getElementById("segmentStatus");
-  const endTimeLabel = document.getElementById("endTimeLabel");
 
   let initialized = false;
   let segmentStart = segmentIdx * SEGMENT_SECONDS;
@@ -91,21 +97,51 @@
     await fetch("{{ url_for('init_video') }}", { method: "POST", body: fd });
   }
 
+  // Make it obvious we require a click
+  continueBtn.disabled = true;
+  vid.controls = false;
+
   vid.addEventListener("loadedmetadata", async () => {
     if (initialized) return;
     initialized = true;
 
     if (segmentEnd > vid.duration) segmentEnd = vid.duration;
 
-    endTimeLabel.textContent = fmt(segmentEnd);
-
+    // Initialize DB with duration/segments once
     await initVideoMetadata();
 
-    vid.currentTime = segmentStart;
+    // Seek to segment start and pause
+    try {
+      vid.currentTime = segmentStart;
+    } catch (e) {
+      console.warn("Seek failed on loadedmetadata:", e);
+    }
     vid.pause();
 
-    continueBtn.disabled = true;
-    status.innerHTML = `Click play. The video will pause automatically at ${fmt(segmentEnd)}.`;
+    status.innerHTML = `Ready. Click "Start Segment" to play ${fmt(segmentStart)} → ${fmt(segmentEnd)} (auto-pause).`;
+    startBtn.disabled = false;
+  });
+
+  startBtn.addEventListener("click", async () => {
+    if (!initialized) return;
+
+    // Always start exactly at the segment boundary
+    try {
+      vid.currentTime = segmentStart;
+    } catch (e) {
+      console.warn("Seek failed on start click:", e);
+    }
+
+    try {
+      startBtn.disabled = true;
+      status.innerHTML = `Playing… will pause at ${fmt(segmentEnd)}.`;
+      vid.controls = true;   // optional: allow pause/volume/fullscreen after starting
+      await vid.play();      // user gesture -> allowed
+    } catch (e) {
+      console.error("Play failed:", e);
+      status.innerHTML = "Video couldn't start. Check console/network; browser may be blocking playback or media is unsupported.";
+      startBtn.disabled = false;
+    }
   });
 
   vid.addEventListener("timeupdate", () => {
@@ -122,7 +158,8 @@
     let detail = "unknown video error";
     if (mediaError && mediaError.code === 4) detail = "the source could not be loaded as playable media";
     if (mediaError && mediaError.code === 3) detail = "media decoding failed";
-    status.innerHTML = `Video failed to load (${detail}). Please verify the video file exists and is a valid media format.`;
+    status.innerHTML = `Video failed to load (${detail}). Verify the file exists, is reachable, and is a supported codec (H.264/AAC MP4 recommended).`;
+    startBtn.disabled = false;
   });
 
   document.querySelectorAll('.rating-slider').forEach((slider) => {

@@ -1,0 +1,19 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Video Emotion Annotation</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+</head>
+<body>
+  <div class="container">
+    <h1>Video Emotion Annotation</h1>
+    <p>You will watch a customer-service dispute between a buyer and seller (split-screen).
+       You will see both people, but you must rate emotions only for the highlighted person.</p>
+
+    <form method="post" action="{{ url_for('start') }}">
+      <button class="btn" type="submit">Start</button>
+    </form>
+  </div>
+</body>
+</html>

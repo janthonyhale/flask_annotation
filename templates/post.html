@@ -1,0 +1,67 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Final Questions</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+</head>
+<body>
+  <div class="container">
+    <h1>Final Questions (Entire Dialogue)</h1>
+
+    <div class="instructions">
+      <strong>Reminder:</strong> Rate only the person you were assigned to (the highlighted {{ target_side }} side).
+    </div>
+
+    {% if error %}
+      <div class="error">{{ error }}</div>
+    {% endif %}
+
+    <form method="post">
+      <h2>Overall emotions (entire dialogue)</h2>
+      <div class="grid">
+        {% for e in emotions %}
+          <div class="q">
+            <label>{{ e }}</label>
+            <select name="overall_{{ (e|lower)|replace('/','_')|replace(' ','_')|replace('-','_') }}" required>
+              <option value="" selected disabled>Choose…</option>
+              {% for i in range(1,8) %}
+                <option value="{{ i }}">{{ i }}</option>
+              {% endfor %}
+            </select>
+            <div class="hint">1 = Not at all, 7 = Extremely</div>
+          </div>
+        {% endfor %}
+      </div>
+
+      <h2>Origin guess</h2>
+      <label>Best guess: where is this person from?</label>
+      <select name="origin_region" required>
+        <option value="" selected disabled>Choose...</option>
+        {% for r in regions %}
+          <option value="{{ r }}">{{ r }}</option>
+        {% endfor %}
+      </select>
+
+      <label>If United States, which state? (or write city/country details)</label>
+      <input name="origin_detail" placeholder="e.g., Texas / Toronto / Seoul">
+
+      <h2>SVI (single items)</h2>
+      {% for key, label in svi_facets %}
+        <div class="q">
+          <label>{{ label }}</label>
+          <select name="{{ key }}" required>
+            <option value="" selected disabled>Choose…</option>
+            {% for i in range(1,8) %}
+              <option value="{{ i }}">{{ i }}</option>
+            {% endfor %}
+          </select>
+          <div class="hint">1 = Not at all satisfied, 7 = Extremely satisfied</div>
+        </div>
+      {% endfor %}
+
+      <button class="btn" type="submit">Finish & Get Code</button>
+    </form>
+  </div>
+</body>
+</html>

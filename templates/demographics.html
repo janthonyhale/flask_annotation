@@ -1,0 +1,37 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Demographics</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+</head>
+<body>
+  <div class="container">
+    <h1>Background Questions</h1>
+
+    <form method="post">
+      <label>Age</label>
+      <input name="age" required>
+
+      <label>Gender</label>
+      <input name="gender" placeholder="Optional">
+
+      <label>Region you grew up in</label>
+      <select name="grew_up_region" required>
+        <option value="" selected disabled>Choose...</option>
+        {% for r in regions %}
+          <option value="{{ r }}">{{ r }}</option>
+        {% endfor %}
+      </select>
+
+      <label>If United States, which state? (or write city/country details)</label>
+      <input name="grew_up_detail" placeholder="e.g., California / London / Shanghai">
+
+      <label>Native language</label>
+      <input name="native_language" required>
+
+      <button class="btn" type="submit">Continue</button>
+    </form>
+  </div>
+</body>
+</html>

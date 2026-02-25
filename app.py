@@ -4,6 +4,7 @@ import uuid
 import random
 import sqlite3
 from datetime import datetime
+from urllib.parse import urlparse, parse_qs
 from flask import Flask, render_template, request, redirect, url_for, session, g, abort
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -13,12 +14,11 @@ DB_PATH = os.path.join(DATA_DIR, "annotations.db")
 SEGMENT_SECONDS = 60  # 1-minute segments
 
 # --- Configure your video pool here ---
-# Prefer hosted video URLs (e.g., Google Drive direct-download links).
-# If you still want local files, set "path" to a file under static/.
+# Share links like /file/d/<id>/view are normalized automatically.
 VIDEO_POOL = [
     {
         "video_id": "sample_001",
-        "url": "https://drive.google.com/uc?export=download&id=YOUR_FILE_ID",
+        "url": "https://drive.google.com/file/d/1tfcgo8K6nHVhhzHtypOO1-ZOjngheT_-/view?usp=drive_link",
     },
 ]
 
@@ -57,6 +57,25 @@ REGIONS = [
     "Other / Prefer not to say",
 ]
 
+GENDERS = [
+    "Female",
+    "Male",
+    "Non-binary",
+    "Another identity",
+    "Prefer not to say",
+]
+
+US_STATES = [
+    "Alabama", "Alaska", "Arizona", "Arkansas", "California", "Colorado", "Connecticut", "Delaware",
+    "Florida", "Georgia", "Hawaii", "Idaho", "Illinois", "Indiana", "Iowa", "Kansas", "Kentucky",
+    "Louisiana", "Maine", "Maryland", "Massachusetts", "Michigan", "Minnesota", "Mississippi", "Missouri",
+    "Montana", "Nebraska", "Nevada", "New Hampshire", "New Jersey", "New Mexico", "New York",
+    "North Carolina", "North Dakota", "Ohio", "Oklahoma", "Oregon", "Pennsylvania", "Rhode Island",
+    "South Carolina", "South Dakota", "Tennessee", "Texas", "Utah", "Vermont", "Virginia", "Washington",
+    "West Virginia", "Wisconsin", "Wyoming", "District of Columbia", "Not in the United States",
+]
+
+
 def create_app():
     app = Flask(__name__)
     app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev_secret_change_me")
@@ -77,22 +96,16 @@ def create_app():
 
     @app.get("/")
     def index():
-        # New participant link
         return render_template("index.html")
 
     @app.post("/start")
     def start():
-        # Create a participant session
         participant_id = request.form.get("participant_id", "").strip()
         if not participant_id:
             abort(400, "Unique ID is required")
 
         assignment = random.choice(VIDEO_POOL)
-
-        # Randomly choose target side: left/right
         target_side = random.choice(["left", "right"])
-
-        # Create a run_id so multiple runs per person is possible later
         run_id = str(uuid.uuid4())
 
         session.clear()
@@ -101,13 +114,10 @@ def create_app():
         session["video_id"] = assignment["video_id"]
         session["video_url"] = resolve_video_source(assignment)
         session["target_side"] = target_side
-
-        # These will be set once browser reads video metadata
         session["duration_sec"] = None
         session["n_segments"] = None
-        session["segment_idx"] = 0  # 0-based
+        session["segment_idx"] = 0
 
-        # Record run row
         g.db.execute(
             """
             INSERT INTO runs(run_id, participant_id, video_id, target_side, created_at_utc)
@@ -122,18 +132,39 @@ def create_app():
     @app.get("/demographics")
     def demographics():
         ensure_session()
-        return render_template("demographics.html", regions=REGIONS)
+        return render_template("demographics.html", regions=REGIONS, genders=GENDERS, us_states=US_STATES)
 
     @app.post("/demographics")
     def demographics_post():
         ensure_session()
         run_id = session["run_id"]
 
+        age_raw = request.form.get("age", "").strip()
+        try:
+            age = int(age_raw)
+        except ValueError:
+            return render_template(
+                "demographics.html",
+                regions=REGIONS,
+                genders=GENDERS,
+                us_states=US_STATES,
+                error="Please enter age as a number.",
+            )
+
+        if age < 18 or age > 120:
+            return render_template(
+                "demographics.html",
+                regions=REGIONS,
+                genders=GENDERS,
+                us_states=US_STATES,
+                error="Please enter an age between 18 and 120.",
+            )
+
         payload = {
-            "age": request.form.get("age", "").strip(),
+            "age": age,
             "gender": request.form.get("gender", "").strip(),
             "grew_up_region": request.form.get("grew_up_region", "").strip(),
-            "grew_up_detail": request.form.get("grew_up_detail", "").strip(),
+            "grew_up_state": request.form.get("grew_up_state", "").strip(),
             "native_language": request.form.get("native_language", "").strip(),
         }
 
@@ -148,10 +179,6 @@ def create_app():
     @app.get("/task")
     def task():
         ensure_session()
-        if session.get("n_segments") is None:
-            # Need video metadata first; JS will call /init_video
-            pass
-
         segment_idx = int(session.get("segment_idx", 0))
         n_segments = session.get("n_segments")
         if n_segments is not None and segment_idx >= int(n_segments):
@@ -171,20 +198,15 @@ def create_app():
 
     @app.post("/init_video")
     def init_video():
-        """
-        Called once from the browser after it loads the video metadata and knows duration.
-        """
         ensure_session()
         duration = request.form.get("duration_sec", type=float)
         if duration is None or duration <= 0:
             abort(400, "Invalid duration")
 
         n_segments = int(math.ceil(duration / SEGMENT_SECONDS))
-
         session["duration_sec"] = float(duration)
         session["n_segments"] = int(n_segments)
 
-        # Save to DB
         g.db.execute(
             "UPDATE runs SET duration_sec=?, n_segments=? WHERE run_id=?",
             (float(duration), int(n_segments), session["run_id"]),
@@ -201,7 +223,6 @@ def create_app():
         if segment_idx < 0:
             abort(400, "Missing segment_idx")
 
-        # Collect emotion ratings 1..7
         ratings = {}
         for e in EMOTIONS:
             key = f"emo_{slug(e)}"
@@ -209,9 +230,7 @@ def create_app():
 
         open_text = request.form.get("open_text", "").strip()
 
-        # Basic validation: require all ratings
         if any(ratings[e] == "" for e in EMOTIONS):
-            # Re-render with an error
             return render_template(
                 "task.html",
                 video_url=session["video_url"],
@@ -235,7 +254,6 @@ def create_app():
         )
         g.db.commit()
 
-        # Advance to next segment
         session["segment_idx"] = segment_idx + 1
         return redirect(url_for("task"))
 
@@ -246,6 +264,7 @@ def create_app():
             "post.html",
             emotions=EMOTIONS,
             regions=REGIONS,
+            us_states=US_STATES,
             svi_facets=SVI_FACETS,
             target_side=session["target_side"],
         )
@@ -255,7 +274,6 @@ def create_app():
         ensure_session()
         run_id = session["run_id"]
 
-        # Overall emotion ratings
         overall = {}
         for e in EMOTIONS:
             key = f"overall_{slug(e)}"
@@ -266,6 +284,7 @@ def create_app():
                 "post.html",
                 emotions=EMOTIONS,
                 regions=REGIONS,
+                us_states=US_STATES,
                 svi_facets=SVI_FACETS,
                 target_side=session["target_side"],
                 error="Please answer all overall emotion ratings.",
@@ -273,7 +292,7 @@ def create_app():
 
         origin_guess = {
             "origin_region": request.form.get("origin_region", "").strip(),
-            "origin_detail": request.form.get("origin_detail", "").strip(),
+            "origin_state": request.form.get("origin_state", "").strip(),
         }
 
         svi = {}
@@ -285,6 +304,7 @@ def create_app():
                 "post.html",
                 emotions=EMOTIONS,
                 regions=REGIONS,
+                us_states=US_STATES,
                 svi_facets=SVI_FACETS,
                 target_side=session["target_side"],
                 error="Please answer all SVI questions.",
@@ -316,9 +336,6 @@ def create_app():
 
     @app.get("/admin/exports.csv")
     def export_csv():
-        """
-        Minimal export endpoint (no auth). Add auth before real deployment.
-        """
         rows = g.db.execute(
             """
             SELECT r.*, sa.segment_idx, sa.ratings_json, sa.open_text
@@ -328,7 +345,6 @@ def create_app():
             """
         ).fetchall()
 
-        # Build a quick CSV response
         import csv
         from io import StringIO
         from flask import Response
@@ -336,10 +352,10 @@ def create_app():
         out = StringIO()
         w = csv.writer(out)
         w.writerow([
-            "run_id","participant_id","video_id","target_side","created_at_utc",
-            "duration_sec","n_segments","demographics_json",
-            "segment_idx","ratings_json","open_text",
-            "post_json","completion_code","finished_at_utc"
+            "run_id", "participant_id", "video_id", "target_side", "created_at_utc",
+            "duration_sec", "n_segments", "demographics_json",
+            "segment_idx", "ratings_json", "open_text",
+            "post_json", "completion_code", "finished_at_utc"
         ])
         for r in rows:
             w.writerow([
@@ -355,10 +371,29 @@ def create_app():
 
 def resolve_video_source(assignment: dict) -> str:
     if assignment.get("url"):
-        return assignment["url"]
+        return normalize_google_drive_url(assignment["url"])
     if assignment.get("path"):
         return url_for("static", filename=assignment["path"])
     abort(500, "Invalid VIDEO_POOL entry: expected 'url' or 'path'.")
+
+
+def normalize_google_drive_url(url: str) -> str:
+    parsed = urlparse(url)
+    if "drive.google.com" not in parsed.netloc:
+        return url
+
+    path_parts = [p for p in parsed.path.split("/") if p]
+    if "file" in path_parts and "d" in path_parts:
+        d_idx = path_parts.index("d")
+        if d_idx + 1 < len(path_parts):
+            file_id = path_parts[d_idx + 1]
+            return f"https://drive.google.com/uc?export=download&id={file_id}"
+
+    query_id = parse_qs(parsed.query).get("id", [])
+    if query_id:
+        return f"https://drive.google.com/uc?export=download&id={query_id[0]}"
+
+    return url
 
 
 # ----------------- Helpers -----------------
@@ -366,6 +401,7 @@ def resolve_video_source(assignment: dict) -> str:
 def ensure_session():
     if "run_id" not in session:
         abort(403, "No active session. Please start from the home page.")
+
 
 def init_db():
     os.makedirs(DATA_DIR, exist_ok=True)
@@ -407,16 +443,19 @@ def init_db():
     conn.commit()
     conn.close()
 
+
 def slug(s: str) -> str:
     return "".join(ch.lower() if ch.isalnum() else "_" for ch in s).strip("_")
 
+
 def make_completion_code() -> str:
-    # Short human-typable code
     return "A-" + uuid.uuid4().hex[:10].upper()
+
 
 def json_dumps(obj) -> str:
     import json
     return json.dumps(obj, ensure_ascii=False)
+
 
 if __name__ == "__main__":
     app = create_app()

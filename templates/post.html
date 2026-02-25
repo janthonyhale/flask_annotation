@@ -40,8 +40,13 @@
         {% endfor %}
       </select>
 
-      <label>If United States, which state? (or write city/country details)</label>
-      <input name="origin_detail" placeholder="e.g., Texas / Toronto / Seoul">
+      <label>If United States, which state?</label>
+      <select name="origin_state" required>
+        <option value="" selected disabled>Choose...</option>
+        {% for s in us_states %}
+          <option value="{{ s }}">{{ s }}</option>
+        {% endfor %}
+      </select>
 
       <h2>SVI (single items)</h2>
       {% for key, label in svi_facets %}

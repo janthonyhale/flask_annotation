@@ -9,12 +9,21 @@
   <div class="container">
     <h1>Background Questions</h1>
 
+    {% if error %}
+      <div class="error">{{ error }}</div>
+    {% endif %}
+
     <form method="post">
       <label>Age</label>
-      <input name="age" required>
+      <input name="age" type="number" min="18" max="120" step="1" required>
 
       <label>Gender</label>
-      <input name="gender" placeholder="Optional">
+      <select name="gender" required>
+        <option value="" selected disabled>Choose...</option>
+        {% for g in genders %}
+          <option value="{{ g }}">{{ g }}</option>
+        {% endfor %}
+      </select>
 
       <label>Region you grew up in</label>
       <select name="grew_up_region" required>
@@ -24,8 +33,13 @@
         {% endfor %}
       </select>
 
-      <label>If United States, which state? (or write city/country details)</label>
-      <input name="grew_up_detail" placeholder="e.g., California / London / Shanghai">
+      <label>If United States, which state?</label>
+      <select name="grew_up_state" required>
+        <option value="" selected disabled>Choose...</option>
+        {% for s in us_states %}
+          <option value="{{ s }}">{{ s }}</option>
+        {% endfor %}
+      </select>
 
       <label>Native language</label>
       <input name="native_language" required>

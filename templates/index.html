@@ -12,6 +12,9 @@
        You will see both people, but you must rate emotions only for the highlighted person.</p>
 
     <form method="post" action="{{ url_for('start') }}">
+      <label for="participant_id">Unique ID</label>
+      <input id="participant_id" name="participant_id" required placeholder="Enter your unique participant ID">
+
       <button class="btn" type="submit">Start</button>
     </form>
   </div>

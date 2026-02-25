@@ -21,7 +21,7 @@
       <div class="task-video-col">
         <div class="video-wrap">
           <video id="vid" controls preload="metadata" playsinline>
-            <source src="{{ video_url }}" type="video/mp4">
+            <source src="{{ video_path }}" type="video/mp4">
             Your browser does not support the video tag.
           </video>
 
@@ -31,13 +31,7 @@
         <div class="segment-status" id="segmentStatus">
           This segment will pause automatically at <span id="endTimeLabel"></span>.
         </div>
-<<<<<<< codex/update-annotation-task-layout-and-features-w24wgg
-=======
-<<<<<<< codex/update-annotation-task-layout-and-features-hautjr
         <div class="hint" id="videoDebug">Video source: {{ video_url }}</div>
-=======
->>>>>>> main
->>>>>>> main
       </div>
 
       <div class="task-form-col">
@@ -123,29 +117,14 @@
     }
   });
 
-<<<<<<< codex/update-annotation-task-layout-and-features-w24wgg
-=======
-<<<<<<< codex/update-annotation-task-layout-and-features-hautjr
->>>>>>> main
   vid.addEventListener("error", () => {
     const mediaError = vid.error;
     let detail = "unknown video error";
     if (mediaError && mediaError.code === 4) detail = "the source could not be loaded as playable media";
     if (mediaError && mediaError.code === 3) detail = "media decoding failed";
-    status.innerHTML = `Video failed to load (${detail}). This is usually a Google Drive permission or link-format issue.`;
+    status.innerHTML = `Video failed to load (${detail}). Please verify the video file exists and is a valid media format.`;
   });
 
-<<<<<<< codex/update-annotation-task-layout-and-features-w24wgg
-=======
-  setTimeout(() => {
-    if (!initialized && vid.readyState === 0) {
-      status.innerHTML = "Still waiting for video metadata. If this persists, the Drive link likely is not streamable to the browser.";
-    }
-  }, 5000);
-
-=======
->>>>>>> main
->>>>>>> main
   document.querySelectorAll('.rating-slider').forEach((slider) => {
     const valueId = slider.dataset.valueId;
     const out = document.getElementById(valueId);

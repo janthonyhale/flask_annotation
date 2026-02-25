@@ -4,6 +4,8 @@ import uuid
 import random
 import sqlite3
 from datetime import datetime
+from urllib.parse import urlparse, parse_qs, unquote
+from urllib.parse import urlparse, parse_qs, unquote
 from flask import Flask, render_template, request, redirect, url_for, session, g, abort
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -134,7 +136,7 @@ def create_app():
         session["participant_id"] = participant_id
         session["run_id"] = run_id
         session["video_id"] = assignment["video_id"]
-        session["video_path"] = assignment["path"]
+        session["video_url"] = resolve_video_source(assignment)
         session["target_side"] = target_side
         session["duration_sec"] = None
         session["n_segments"] = None
@@ -183,10 +185,14 @@ def create_app():
             )
 
         grew_up_state = request.form.get("grew_up_state", "").strip()
+        grew_up_state = request.form.get("grew_up_state", "").strip()
         payload = {
             "age": age,
             "gender": request.form.get("gender", "").strip(),
             "grew_up_region": request.form.get("grew_up_region", "").strip(),
+            "grew_up_state": grew_up_state,
+            # Backward-compatible alias for previous exports/consumers
+            "grew_up_detail": grew_up_state,
             "grew_up_state": grew_up_state,
             # Backward-compatible alias for previous exports/consumers
             "grew_up_detail": grew_up_state,
@@ -211,7 +217,7 @@ def create_app():
 
         return render_template(
             "task.html",
-            video_path=url_for("static", filename=session["video_path"]),
+            video_url=session["video_url"],
             target_side=session["target_side"],
             segment_idx=segment_idx,
             n_segments=n_segments,
@@ -258,7 +264,7 @@ def create_app():
         if any(ratings[e] == "" for e in EMOTIONS):
             return render_template(
                 "task.html",
-                video_path=url_for("static", filename=session["video_path"]),
+                video_url=session["video_url"],
                 target_side=session["target_side"],
                 segment_idx=segment_idx,
                 n_segments=session.get("n_segments"),
@@ -318,6 +324,9 @@ def create_app():
         origin_state = request.form.get("origin_state", "").strip()
         origin_guess = {
             "origin_region": request.form.get("origin_region", "").strip(),
+            "origin_state": origin_state,
+            # Backward-compatible alias for previous exports/consumers
+            "origin_detail": origin_state,
             "origin_state": origin_state,
             # Backward-compatible alias for previous exports/consumers
             "origin_detail": origin_state,
@@ -395,6 +404,50 @@ def create_app():
         return Response(out.getvalue(), mimetype="text/csv")
 
     return app
+
+
+def resolve_video_source(assignment: dict) -> str:
+    if assignment.get("url"):
+        return normalize_google_drive_url(assignment["url"])
+    if assignment.get("path"):
+        return url_for("static", filename=assignment["path"])
+    abort(500, "Invalid VIDEO_POOL entry: expected 'url' or 'path'.")
+
+
+def normalize_google_drive_url(url: str) -> str:
+    """
+    Convert common Google Drive sharing URLs into a more video-player-friendly direct URL.
+    We preserve resource keys when present, since some files require them.
+    """
+    parsed = urlparse(url)
+    if "drive.google.com" not in parsed.netloc:
+        return url
+
+    query = parse_qs(parsed.query)
+
+    # /file/d/<id>/view?resourcekey=...
+    path_parts = [p for p in parsed.path.split("/") if p]
+    file_id = None
+    if "file" in path_parts and "d" in path_parts:
+        d_idx = path_parts.index("d")
+        if d_idx + 1 < len(path_parts):
+            file_id = unquote(path_parts[d_idx + 1])
+
+    # /open?id=<id> or /uc?id=<id>
+    if file_id is None:
+        query_id = query.get("id", [])
+        if query_id:
+            file_id = query_id[0]
+
+    if not file_id:
+        return url
+
+    base = f"https://drive.google.com/uc?export=download&id={file_id}&confirm=t"
+    resource_key = query.get("resourcekey", [])
+    if resource_key:
+        base += f"&resourcekey={resource_key[0]}"
+
+    return base
 
 
 # ----------------- Helpers -----------------

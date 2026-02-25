@@ -11,6 +11,7 @@
 
     <div class="instructions">
       <strong>Important:</strong> You will see both people. <u>Only rate emotions for the person inside the red box</u>.
+      You cannot skip around in the video during playback.
     </div>
 
     {% if error %}
@@ -20,24 +21,17 @@
     <div class="task-layout">
       <div class="task-video-col">
         <div class="video-wrap">
-          <!-- IMPORTANT: use video_url (what Flask passes) -->
-          <video id="vid" preload="metadata" playsinline>
-            <source src="{{ video_url }}" type="video/mp4">
+          <video id="vid" controls preload="metadata" playsinline controlsList="nodownload noplaybackrate" disablePictureInPicture>
+            <source src="{{ video_path }}">
             Your browser does not support the video tag.
           </video>
 
           <div id="highlight" class="highlight {{ target_side }}"></div>
         </div>
 
-        <div class="video-controls">
-          <button id="startSegmentBtn" class="btn" type="button">Start Segment</button>
-        </div>
-
         <div class="segment-status" id="segmentStatus">
-          Segment not started.
+          This segment will pause automatically at <span id="endTimeLabel"></span>.
         </div>
-
-        <div class="hint" id="videoDebug">Video source: {{ video_url }}</div>
       </div>
 
       <div class="task-form-col">
@@ -52,7 +46,8 @@
               <div class="q slider-q">
                 <label for="emo_{{ key }}">{{ e }}: <span id="val_emo_{{ key }}">4</span></label>
                 <input id="emo_{{ key }}" type="range" min="1" max="7" step="1" value="4"
-                       name="emo_{{ key }}" class="rating-slider" data-value-id="val_emo_{{ key }}" required>
+                       name="emo_{{ key }}" class="rating-slider" data-value-id="val_emo_{{ key }}" data-touch-id="touch_emo_{{ key }}" required>
+                <input type="hidden" id="touch_emo_{{ key }}" name="touch_emo_{{ key }}" value="0">
                 <div class="hint">1 = Not at all, 7 = Extremely</div>
               </div>
             {% endfor %}
@@ -72,13 +67,16 @@
   const SEGMENT_SECONDS = {{ segment_seconds|int }};
   const segmentIdx = {{ segment_idx|int }};
   const vid = document.getElementById("vid");
-  const startBtn = document.getElementById("startSegmentBtn");
+  const form = document.getElementById("segmentForm");
   const continueBtn = document.getElementById("continueBtn");
   const status = document.getElementById("segmentStatus");
 
   let initialized = false;
   let segmentStart = segmentIdx * SEGMENT_SECONDS;
   let segmentEnd = (segmentIdx + 1) * SEGMENT_SECONDS;
+  let programmaticSeek = false;
+  let lockTime = segmentStart;
+  let segmentFinished = false;
 
   function fmt(t){
     const m = Math.floor(t/60);
@@ -86,9 +84,18 @@
     return `${m}:${String(s).padStart(2,'0')}`;
   }
 
-  function enableForm(){
-    continueBtn.disabled = false;
-    status.innerHTML = "Segment finished. Please answer the questions to continue.";
+  function allSlidersMoved(){
+    return Array.from(document.querySelectorAll('input[type="hidden"][id^="touch_emo_"]')).every((x) => x.value === "1");
+  }
+
+  function maybeEnableForm(){
+    if (segmentFinished && allSlidersMoved()) {
+      continueBtn.disabled = false;
+      status.innerHTML = "Segment finished and all sliders moved. You can continue.";
+    } else if (segmentFinished) {
+      continueBtn.disabled = true;
+      status.innerHTML = "Segment finished. Move every slider at least once before continuing.";
+    }
   }
 
   async function initVideoMetadata(){
@@ -106,50 +113,44 @@
     initialized = true;
 
     if (segmentEnd > vid.duration) segmentEnd = vid.duration;
-
-    // Initialize DB with duration/segments once
+    endTimeLabel.textContent = fmt(segmentEnd);
     await initVideoMetadata();
 
-    // Seek to segment start and pause
-    try {
-      vid.currentTime = segmentStart;
-    } catch (e) {
-      console.warn("Seek failed on loadedmetadata:", e);
-    }
+    programmaticSeek = true;
+    vid.currentTime = segmentStart;
+    lockTime = segmentStart;
     vid.pause();
+    setTimeout(() => { programmaticSeek = false; }, 0);
 
-    status.innerHTML = `Ready. Click "Start Segment" to play ${fmt(segmentStart)} → ${fmt(segmentEnd)} (auto-pause).`;
-    startBtn.disabled = false;
-  });
-
-  startBtn.addEventListener("click", async () => {
-    if (!initialized) return;
-
-    // Always start exactly at the segment boundary
-    try {
-      vid.currentTime = segmentStart;
-    } catch (e) {
-      console.warn("Seek failed on start click:", e);
-    }
-
-    try {
-      startBtn.disabled = true;
-      status.innerHTML = `Playing… will pause at ${fmt(segmentEnd)}.`;
-      vid.controls = true;   // optional: allow pause/volume/fullscreen after starting
-      await vid.play();      // user gesture -> allowed
-    } catch (e) {
-      console.error("Play failed:", e);
-      status.innerHTML = "Video couldn't start. Check console/network; browser may be blocking playback or media is unsupported.";
-      startBtn.disabled = false;
-    }
+    continueBtn.disabled = true;
+    status.innerHTML = `Click play. The video will pause automatically at ${fmt(segmentEnd)}. Seeking is disabled.`;
   });
 
   vid.addEventListener("timeupdate", () => {
     if (!initialized) return;
-    if (vid.currentTime >= segmentEnd - 0.05) {
+    if (!segmentFinished) {
+      lockTime = Math.max(lockTime, vid.currentTime);
+    }
+
+    if (vid.currentTime >= segmentEnd - 0.05 && !segmentFinished) {
+      segmentFinished = true;
       vid.pause();
+      programmaticSeek = true;
       vid.currentTime = segmentEnd;
-      enableForm();
+      lockTime = segmentEnd;
+      setTimeout(() => { programmaticSeek = false; }, 0);
+      maybeEnableForm();
+    }
+  });
+
+  vid.addEventListener("seeking", () => {
+    if (!initialized || programmaticSeek) return;
+
+    // Disallow scrubbing/skip after start. Keep playback pinned to latest allowed point.
+    if (Math.abs(vid.currentTime - lockTime) > 0.1) {
+      programmaticSeek = true;
+      vid.currentTime = lockTime;
+      setTimeout(() => { programmaticSeek = false; }, 0);
     }
   });
 
@@ -158,16 +159,26 @@
     let detail = "unknown video error";
     if (mediaError && mediaError.code === 4) detail = "the source could not be loaded as playable media";
     if (mediaError && mediaError.code === 3) detail = "media decoding failed";
-    status.innerHTML = `Video failed to load (${detail}). Verify the file exists, is reachable, and is a supported codec (H.264/AAC MP4 recommended).`;
-    startBtn.disabled = false;
+    status.innerHTML = `Video failed to load (${detail}). Please verify the video file exists and is a valid media format.`;
   });
 
   document.querySelectorAll('.rating-slider').forEach((slider) => {
     const valueId = slider.dataset.valueId;
+    const touchId = slider.dataset.touchId;
     const out = document.getElementById(valueId);
+    const touch = document.getElementById(touchId);
     slider.addEventListener('input', () => {
       out.textContent = slider.value;
+      touch.value = "1";
+      maybeEnableForm();
     });
+  });
+
+  form.addEventListener('submit', (ev) => {
+    if (!segmentFinished || !allSlidersMoved()) {
+      ev.preventDefault();
+      maybeEnableForm();
+    }
   });
 })();
 </script>

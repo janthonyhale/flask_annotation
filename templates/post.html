@@ -11,13 +11,14 @@
 
     <div class="instructions">
       <strong>Reminder:</strong> Rate only the person you were assigned to (the highlighted {{ target_side }} side).
+      Move every slider at least once before submitting.
     </div>
 
     {% if error %}
       <div class="error">{{ error }}</div>
     {% endif %}
 
-    <form method="post">
+    <form method="post" id="postForm">
       <h2>Overall emotions (entire dialogue)</h2>
       <div class="slider-grid">
         {% for e in emotions %}
@@ -25,7 +26,8 @@
           <div class="q slider-q">
             <label for="overall_{{ key }}">{{ e }}: <span id="val_overall_{{ key }}">4</span></label>
             <input id="overall_{{ key }}" type="range" min="1" max="7" step="1" value="4"
-                   name="overall_{{ key }}" class="rating-slider" data-value-id="val_overall_{{ key }}" required>
+                   name="overall_{{ key }}" class="rating-slider" data-value-id="val_overall_{{ key }}" data-touch-id="touch_overall_{{ key }}" required>
+            <input type="hidden" id="touch_overall_{{ key }}" name="touch_overall_{{ key }}" value="0">
             <div class="hint">1 = Not at all, 7 = Extremely</div>
           </div>
         {% endfor %}
@@ -53,7 +55,8 @@
         <div class="q slider-q">
           <label for="{{ key }}">{{ label }}: <span id="val_{{ key }}">4</span></label>
           <input id="{{ key }}" type="range" min="1" max="7" step="1" value="4"
-                 name="{{ key }}" class="rating-slider" data-value-id="val_{{ key }}" required>
+                 name="{{ key }}" class="rating-slider" data-value-id="val_{{ key }}" data-touch-id="touch_{{ key }}" required>
+          <input type="hidden" id="touch_{{ key }}" name="touch_{{ key }}" value="0">
           <div class="hint">1 = Not at all satisfied, 7 = Extremely satisfied</div>
         </div>
       {% endfor %}
@@ -63,12 +66,28 @@
   </div>
 
   <script>
+    const form = document.getElementById('postForm');
+
+    function allMoved() {
+      return Array.from(document.querySelectorAll('input[type="hidden"][id^="touch_"]')).every((x) => x.value === '1');
+    }
+
     document.querySelectorAll('.rating-slider').forEach((slider) => {
       const valueId = slider.dataset.valueId;
+      const touchId = slider.dataset.touchId;
       const out = document.getElementById(valueId);
+      const touch = document.getElementById(touchId);
       slider.addEventListener('input', () => {
         out.textContent = slider.value;
+        touch.value = '1';
       });
+    });
+
+    form.addEventListener('submit', (ev) => {
+      if (!allMoved()) {
+        ev.preventDefault();
+        alert('Please move every slider at least once before submitting.');
+      }
     });
   </script>
 </body>

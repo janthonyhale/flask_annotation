@@ -386,27 +386,12 @@ def create_app():
         run_id = session["run_id"]
 
         overall = {}
-        for e in EMOTIONS:
-            key = f"overall_{slug(e)}"
-            overall[e] = request.form.get(key, "").strip()
 
         svi = {}
         for key, _label in SVI_FACETS:
             svi[key] = request.form.get(key, "").strip()
 
-        moved_overall_ok = all(request.form.get(f"touch_overall_{slug(e)}") == "1" for e in EMOTIONS)
         moved_svi_ok = all(request.form.get(f"touch_{key}") == "1" for key, _ in SVI_FACETS)
-
-        if any(overall[e] == "" for e in EMOTIONS) or not moved_overall_ok:
-            return render_template(
-                "post.html",
-                emotions=EMOTIONS,
-                regions=REGIONS,
-                us_states=US_STATES,
-                svi_facets=SVI_FACETS,
-                target_side=session["target_side"],
-                error="Please answer all overall emotion ratings and move every slider.",
-            )
 
         origin_state = request.form.get("origin_state", "").strip()
         origin_guess = {

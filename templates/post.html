@@ -19,30 +19,6 @@
     {% endif %}
 
     <form method="post" id="postForm">
-      <h2>Overall emotions</h2>
-      <div class="slider-grid">
-        {% set overall_qs = [
-          ("anger", "Anger"),
-          ("sadness", "Sadness"),
-          ("fear_anxiety", "Fear/Anxiety"),
-          ("joy_happiness", "Joy/Happiness"),
-          ("disgust", "Disgust"),
-          ("surprise", "Surprise"),
-          ("compassion_empathy", "Compassion/Empathy"),
-          ("neutral", "Neutral"),
-        ] %}
-        {% for key, label in overall_qs %}
-          <div class="q slider-q">
-            <label for="overall_{{ key }}">{{ label }}: <span id="val_overall_{{ key }}">4</span></label>
-            <input id="overall_{{ key }}" type="range" min="1" max="7" step="1" value="4"
-                   name="overall_{{ key }}" class="rating-slider"
-                   data-value-id="val_overall_{{ key }}" data-touch-id="touch_overall_{{ key }}" required>
-            <input type="hidden" id="touch_overall_{{ key }}" name="touch_overall_{{ key }}" value="0">
-            <div class="hint">1 = Not at all, 7 = Extremely</div>
-          </div>
-        {% endfor %}
-      </div>
-
       <h2>Indicate what emotion the highlighted person expressed during the entire dialogue</h2>
 
       <div class="slider-grid">

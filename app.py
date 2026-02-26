@@ -299,6 +299,14 @@ def create_app():
         if segment_idx < 0:
             abort(400, "Missing segment_idx")
 
+        current_segment_idx = int(session.get("segment_idx", 0))
+        if segment_idx != current_segment_idx:
+            segment_idx = current_segment_idx
+
+        n_segments = session.get("n_segments")
+        if n_segments is not None and segment_idx >= int(n_segments):
+            return redirect(url_for("post_dialog"))
+
         ratings = {}
         for e in EMOTIONS:
             key = f"emo_{slug(e)}"
@@ -324,9 +332,8 @@ def create_app():
         felt_primary = request.form.get("felt_primary", "").strip()
 
 
-        moved_ok = all(request.form.get(f"touch_emo_{slug(e)}") == "1" for e in EMOTIONS)
         moved_exp_ok = all(request.form.get(f"touch_exp_{k}") == "1" for k, _ in exp_items)
-        if any(ratings[e] == "" for e in EMOTIONS) or not moved_ok or any(exp_ratings[k] == "" for k, _ in exp_items) or not moved_exp_ok or felt_primary == "":
+        if any(exp_ratings[k] == "" for k, _ in exp_items) or not moved_exp_ok or felt_primary == "":
             video_url = session.get("video_url")
             video_path_local = session.get("video_path")
             return render_template(
@@ -340,7 +347,7 @@ def create_app():
                 emotions=EMOTIONS,
                 run_id=session["run_id"],
                 video_id=session["video_id"],
-                error="Please answer all questions, move every slider at least once, and provide your primary felt emotion(s) before continuing.",
+                error="Please answer all segment questions, move every slider at least once, and provide your primary felt emotion(s) before continuing.",
             )
 
         g.db.execute(
@@ -353,7 +360,12 @@ def create_app():
         )
         g.db.commit()
 
-        session["segment_idx"] = segment_idx + 1
+        next_segment_idx = segment_idx + 1
+        session["segment_idx"] = next_segment_idx
+
+        if n_segments is not None and next_segment_idx >= int(n_segments):
+            return redirect(url_for("post_dialog"))
+
         return redirect(url_for("task"))
 
     @app.get("/post_dialog")
@@ -374,27 +386,12 @@ def create_app():
         run_id = session["run_id"]
 
         overall = {}
-        for e in EMOTIONS:
-            key = f"overall_{slug(e)}"
-            overall[e] = request.form.get(key, "").strip()
 
         svi = {}
         for key, _label in SVI_FACETS:
             svi[key] = request.form.get(key, "").strip()
 
-        moved_overall_ok = all(request.form.get(f"touch_overall_{slug(e)}") == "1" for e in EMOTIONS)
         moved_svi_ok = all(request.form.get(f"touch_{key}") == "1" for key, _ in SVI_FACETS)
-
-        if any(overall[e] == "" for e in EMOTIONS) or not moved_overall_ok:
-            return render_template(
-                "post.html",
-                emotions=EMOTIONS,
-                regions=REGIONS,
-                us_states=US_STATES,
-                svi_facets=SVI_FACETS,
-                target_side=session["target_side"],
-                error="Please answer all overall emotion ratings and move every slider.",
-            )
 
         origin_state = request.form.get("origin_state", "").strip()
         origin_guess = {

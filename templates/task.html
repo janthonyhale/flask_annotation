@@ -11,7 +11,7 @@
 
     <div class="instructions">
       <strong>Important:</strong> You will see both people. <u>Only rate emotions for the person inside the red box</u>.
-      You cannot skip around in the video during playback.
+      Do not skip around in the video; watch the segment in order.
     </div>
 
     {% if error %}
@@ -21,8 +21,8 @@
     <div class="task-layout">
       <div class="task-video-col">
         <div class="video-wrap">
-          <video id="vid" controls preload="metadata" playsinline controlsList="nodownload noplaybackrate" disablePictureInPicture>
-            <source src="{{ video_path }}">
+          <video id="vid" controls preload="metadata" playsinline>
+            <source src="{{ video_path }}" type="{{ video_mime }}">
             Your browser does not support the video tag.
           </video>
 
@@ -74,8 +74,6 @@
   let initialized = false;
   let segmentStart = segmentIdx * SEGMENT_SECONDS;
   let segmentEnd = (segmentIdx + 1) * SEGMENT_SECONDS;
-  let programmaticSeek = false;
-  let lockTime = segmentStart;
   let segmentFinished = false;
 
   function fmt(t){
@@ -116,7 +114,6 @@
     endTimeLabel.textContent = fmt(segmentEnd);
     await initVideoMetadata();
 
-    programmaticSeek = true;
     vid.currentTime = segmentStart;
     lockTime = segmentStart;
     vid.pause();
@@ -128,29 +125,12 @@
 
   vid.addEventListener("timeupdate", () => {
     if (!initialized) return;
-    if (!segmentFinished) {
-      lockTime = Math.max(lockTime, vid.currentTime);
-    }
 
     if (vid.currentTime >= segmentEnd - 0.05 && !segmentFinished) {
       segmentFinished = true;
       vid.pause();
-      programmaticSeek = true;
       vid.currentTime = segmentEnd;
-      lockTime = segmentEnd;
-      setTimeout(() => { programmaticSeek = false; }, 0);
       maybeEnableForm();
-    }
-  });
-
-  vid.addEventListener("seeking", () => {
-    if (!initialized || programmaticSeek) return;
-
-    // Disallow scrubbing/skip after start. Keep playback pinned to latest allowed point.
-    if (Math.abs(vid.currentTime - lockTime) > 0.1) {
-      programmaticSeek = true;
-      vid.currentTime = lockTime;
-      setTimeout(() => { programmaticSeek = false; }, 0);
     }
   });
 

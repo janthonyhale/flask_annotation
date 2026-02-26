@@ -223,7 +223,12 @@ def create_app():
 
         return render_template(
             "task.html",
+<<<<<<< codex/update-annotation-task-layout-and-features-qf13jz
+            video_path=url_for("static", filename=session["video_path"]),
+            video_mime=guess_video_mime(session["video_path"]),
+=======
             video_url=session["video_url"],
+>>>>>>> main
             target_side=session["target_side"],
             segment_idx=segment_idx,
             n_segments=n_segments,
@@ -271,7 +276,12 @@ def create_app():
         if any(ratings[e] == "" for e in EMOTIONS) or not moved_ok:
             return render_template(
                 "task.html",
+<<<<<<< codex/update-annotation-task-layout-and-features-qf13jz
+                video_path=url_for("static", filename=session["video_path"]),
+                video_mime=guess_video_mime(session["video_path"]),
+=======
                 video_url=session["video_url"],
+>>>>>>> main
                 target_side=session["target_side"],
                 segment_idx=segment_idx,
                 n_segments=session.get("n_segments"),
@@ -512,6 +522,19 @@ def choose_video_assignment(db, video_pool: list[dict], target_minutes=None) -> 
     return random.choice(least_annotated)
 
 
+<<<<<<< codex/update-annotation-task-layout-and-features-qf13jz
+def guess_video_mime(video_path: str) -> str:
+    ext = os.path.splitext(video_path)[1].lower()
+    return {
+        ".mp4": "video/mp4",
+        ".webm": "video/webm",
+        ".mov": "video/quicktime",
+        ".m4v": "video/mp4",
+    }.get(ext, "video/mp4")
+
+
+=======
+>>>>>>> main
 def init_db():
     os.makedirs(DATA_DIR, exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
@@ -565,7 +588,10 @@ def make_completion_code(participant_id: str) -> str:
     hashed = hash_participant_id(participant_id)
     return f"A-{hashed}-{uuid.uuid4().hex[:6].upper()}"
 
+<<<<<<< codex/update-annotation-task-layout-and-features-qf13jz
+=======
 
+>>>>>>> main
 
 def json_dumps(obj) -> str:
     import json

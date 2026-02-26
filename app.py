@@ -216,6 +216,7 @@ def create_app():
     @app.get("/task")
     def task():
         ensure_session()
+        ensure_video_in_session()
         segment_idx = int(session.get("segment_idx", 0))
         n_segments = session.get("n_segments")
         if n_segments is not None and segment_idx >= int(n_segments):
@@ -237,6 +238,7 @@ def create_app():
     @app.post("/init_video")
     def init_video():
         ensure_session()
+        ensure_video_in_session()
         duration = request.form.get("duration_sec", type=float)
         if duration is None or duration <= 0:
             abort(400, "Invalid duration")
@@ -256,6 +258,7 @@ def create_app():
     @app.post("/submit_segment")
     def submit_segment():
         ensure_session()
+        ensure_video_in_session()
         run_id = session["run_id"]
         segment_idx = int(request.form.get("segment_idx", -1))
         if segment_idx < 0:
@@ -464,6 +467,24 @@ def normalize_google_drive_url(url: str) -> str:
 def ensure_session():
     if "run_id" not in session:
         abort(403, "No active session. Please start from the home page.")
+
+
+def ensure_video_in_session():
+    """Backfill video_path for old/in-flight sessions created before migration."""
+    if session.get("video_path"):
+        return
+
+    video_id = session.get("video_id")
+    if not video_id:
+        abort(403, "No active video assignment. Please start from the home page.")
+
+    video_pool = load_video_pool_from_static()
+    for video in video_pool:
+        if video["video_id"] == video_id:
+            session["video_path"] = video["path"]
+            return
+
+    abort(400, "Assigned video is no longer available in static/videos.")
 
 
 def parse_target_minutes(raw: str):

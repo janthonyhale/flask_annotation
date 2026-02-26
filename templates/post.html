@@ -11,24 +11,23 @@
 
     <div class="instructions">
       <strong>Reminder:</strong> Rate only the person you were assigned to (the highlighted {{ target_side }} side).
+      Move every slider at least once before submitting.
     </div>
 
     {% if error %}
       <div class="error">{{ error }}</div>
     {% endif %}
 
-    <form method="post">
+    <form method="post" id="postForm">
       <h2>Overall emotions (entire dialogue)</h2>
-      <div class="grid">
+      <div class="slider-grid">
         {% for e in emotions %}
-          <div class="q">
-            <label>{{ e }}</label>
-            <select name="overall_{{ (e|lower)|replace('/','_')|replace(' ','_')|replace('-','_') }}" required>
-              <option value="" selected disabled>Choose…</option>
-              {% for i in range(1,8) %}
-                <option value="{{ i }}">{{ i }}</option>
-              {% endfor %}
-            </select>
+          {% set key = (e|lower)|replace('/','_')|replace(' ','_')|replace('-','_') %}
+          <div class="q slider-q">
+            <label for="overall_{{ key }}">{{ e }}: <span id="val_overall_{{ key }}">4</span></label>
+            <input id="overall_{{ key }}" type="range" min="1" max="7" step="1" value="4"
+                   name="overall_{{ key }}" class="rating-slider" data-value-id="val_overall_{{ key }}" data-touch-id="touch_overall_{{ key }}" required>
+            <input type="hidden" id="touch_overall_{{ key }}" name="touch_overall_{{ key }}" value="0">
             <div class="hint">1 = Not at all, 7 = Extremely</div>
           </div>
         {% endfor %}
@@ -43,19 +42,21 @@
         {% endfor %}
       </select>
 
-      <label>If United States, which state? (or write city/country details)</label>
-      <input name="origin_detail" placeholder="e.g., Texas / Toronto / Seoul">
+      <label>If United States, which state?</label>
+      <select name="origin_state" required>
+        <option value="" selected disabled>Choose...</option>
+        {% for s in us_states %}
+          <option value="{{ s }}">{{ s }}</option>
+        {% endfor %}
+      </select>
 
       <h2>SVI (single items)</h2>
       {% for key, label in svi_facets %}
-        <div class="q">
-          <label>{{ label }}</label>
-          <select name="{{ key }}" required>
-            <option value="" selected disabled>Choose…</option>
-            {% for i in range(1,8) %}
-              <option value="{{ i }}">{{ i }}</option>
-            {% endfor %}
-          </select>
+        <div class="q slider-q">
+          <label for="{{ key }}">{{ label }}: <span id="val_{{ key }}">4</span></label>
+          <input id="{{ key }}" type="range" min="1" max="7" step="1" value="4"
+                 name="{{ key }}" class="rating-slider" data-value-id="val_{{ key }}" data-touch-id="touch_{{ key }}" required>
+          <input type="hidden" id="touch_{{ key }}" name="touch_{{ key }}" value="0">
           <div class="hint">1 = Not at all satisfied, 7 = Extremely satisfied</div>
         </div>
       {% endfor %}
@@ -63,5 +64,31 @@
       <button class="btn" type="submit">Finish & Get Code</button>
     </form>
   </div>
+
+  <script>
+    const form = document.getElementById('postForm');
+
+    function allMoved() {
+      return Array.from(document.querySelectorAll('input[type="hidden"][id^="touch_"]')).every((x) => x.value === '1');
+    }
+
+    document.querySelectorAll('.rating-slider').forEach((slider) => {
+      const valueId = slider.dataset.valueId;
+      const touchId = slider.dataset.touchId;
+      const out = document.getElementById(valueId);
+      const touch = document.getElementById(touchId);
+      slider.addEventListener('input', () => {
+        out.textContent = slider.value;
+        touch.value = '1';
+      });
+    });
+
+    form.addEventListener('submit', (ev) => {
+      if (!allMoved()) {
+        ev.preventDefault();
+        alert('Please move every slider at least once before submitting.');
+      }
+    });
+  </script>
 </body>
 </html>

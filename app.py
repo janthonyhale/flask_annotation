@@ -3,6 +3,7 @@ import math
 import uuid
 import random
 import sqlite3
+import hashlib
 from datetime import datetime
 from flask import Flask, render_template, request, redirect, url_for, session, g, abort
 
@@ -13,11 +14,32 @@ DB_PATH = os.path.join(DATA_DIR, "annotations.db")
 SEGMENT_SECONDS = 60  # 1-minute segments
 
 # --- Configure your video pool here ---
-# Put MP4s in static/videos/
-VIDEO_POOL = [
-    {"video_id": "sample_001", "path": "videos/sample.mp4"},
-    # {"video_id": "dlg002", "path": "videos/dlg002.mp4"},
-]
+# Videos are auto-discovered from static/videos/.
+# Supported extensions: .mp4, .webm, .mov, .m4v
+VIDEO_EXTENSIONS = {".mp4", ".webm", ".mov", ".m4v"}
+
+# Optional target length matching tolerance for ?t=<minutes>
+TARGET_DURATION_TOLERANCE_SEC = 20
+
+
+def load_video_pool_from_static() -> list[dict]:
+    videos_dir = os.path.join(APP_DIR, "static", "videos")
+    if not os.path.isdir(videos_dir):
+        return []
+
+    pool = []
+    for name in sorted(os.listdir(videos_dir)):
+        path = os.path.join(videos_dir, name)
+        if not os.path.isfile(path):
+            continue
+        ext = os.path.splitext(name)[1].lower()
+        if ext not in VIDEO_EXTENSIONS:
+            continue
+
+        video_id = os.path.splitext(name)[0]
+        pool.append({"video_id": video_id, "path": f"videos/{name}"})
+    return pool
+
 
 # Emotions: edit to match your self-report instrument
 EMOTIONS = [
@@ -54,6 +76,25 @@ REGIONS = [
     "Other / Prefer not to say",
 ]
 
+GENDERS = [
+    "Female",
+    "Male",
+    "Non-binary",
+    "Another identity",
+    "Prefer not to say",
+]
+
+US_STATES = [
+    "Alabama", "Alaska", "Arizona", "Arkansas", "California", "Colorado", "Connecticut", "Delaware",
+    "Florida", "Georgia", "Hawaii", "Idaho", "Illinois", "Indiana", "Iowa", "Kansas", "Kentucky",
+    "Louisiana", "Maine", "Maryland", "Massachusetts", "Michigan", "Minnesota", "Mississippi", "Missouri",
+    "Montana", "Nebraska", "Nevada", "New Hampshire", "New Jersey", "New Mexico", "New York",
+    "North Carolina", "North Dakota", "Ohio", "Oklahoma", "Oregon", "Pennsylvania", "Rhode Island",
+    "South Carolina", "South Dakota", "Tennessee", "Texas", "Utah", "Vermont", "Virginia", "Washington",
+    "West Virginia", "Wisconsin", "Wyoming", "District of Columbia", "Not in the United States",
+]
+
+
 def create_app():
     app = Flask(__name__)
     app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev_secret_change_me")
@@ -74,19 +115,28 @@ def create_app():
 
     @app.get("/")
     def index():
-        # New participant link
-        return render_template("index.html")
+        prefill_id = request.args.get("id", "").strip()
+        t_value = request.args.get("t", "").strip()
+        return render_template("index.html", prefill_id=prefill_id, t_value=t_value)
 
     @app.post("/start")
     def start():
-        # Create a participant session
-        participant_id = str(uuid.uuid4())
-        assignment = random.choice(VIDEO_POOL)
+        participant_id = request.form.get("participant_id", "").strip()
+        if not participant_id:
+            abort(400, "Unique ID is required")
 
-        # Randomly choose target side: left/right
+        t_minutes = parse_target_minutes(request.form.get("t", "").strip())
+        video_pool = load_video_pool_from_static()
+        if not video_pool:
+            return render_template(
+                "index.html",
+                error="No videos found. Add files to static/videos (e.g., .mp4, .webm).",
+                prefill_id=participant_id,
+                t_value=request.form.get("t", "").strip(),
+            )
+
+        assignment = choose_video_assignment(g.db, video_pool, t_minutes)
         target_side = random.choice(["left", "right"])
-
-        # Create a run_id so multiple runs per person is possible later
         run_id = str(uuid.uuid4())
 
         session.clear()
@@ -95,13 +145,11 @@ def create_app():
         session["video_id"] = assignment["video_id"]
         session["video_path"] = assignment["path"]
         session["target_side"] = target_side
-
-        # These will be set once browser reads video metadata
         session["duration_sec"] = None
         session["n_segments"] = None
-        session["segment_idx"] = 0  # 0-based
+        session["segment_idx"] = 0
+        session["target_minutes"] = t_minutes
 
-        # Record run row
         g.db.execute(
             """
             INSERT INTO runs(run_id, participant_id, video_id, target_side, created_at_utc)
@@ -116,18 +164,42 @@ def create_app():
     @app.get("/demographics")
     def demographics():
         ensure_session()
-        return render_template("demographics.html", regions=REGIONS)
+        return render_template("demographics.html", regions=REGIONS, genders=GENDERS, us_states=US_STATES)
 
     @app.post("/demographics")
     def demographics_post():
         ensure_session()
         run_id = session["run_id"]
 
+        age_raw = request.form.get("age", "").strip()
+        try:
+            age = int(age_raw)
+        except ValueError:
+            return render_template(
+                "demographics.html",
+                regions=REGIONS,
+                genders=GENDERS,
+                us_states=US_STATES,
+                error="Please enter age as a number.",
+            )
+
+        if age < 18 or age > 120:
+            return render_template(
+                "demographics.html",
+                regions=REGIONS,
+                genders=GENDERS,
+                us_states=US_STATES,
+                error="Please enter an age between 18 and 120.",
+            )
+
+        grew_up_state = request.form.get("grew_up_state", "").strip()
         payload = {
-            "age": request.form.get("age", "").strip(),
+            "age": age,
             "gender": request.form.get("gender", "").strip(),
             "grew_up_region": request.form.get("grew_up_region", "").strip(),
-            "grew_up_detail": request.form.get("grew_up_detail", "").strip(),
+            "grew_up_state": grew_up_state,
+            # Backward-compatible alias for previous exports/consumers
+            "grew_up_detail": grew_up_state,
             "native_language": request.form.get("native_language", "").strip(),
         }
 
@@ -142,10 +214,6 @@ def create_app():
     @app.get("/task")
     def task():
         ensure_session()
-        if session.get("n_segments") is None:
-            # Need video metadata first; JS will call /init_video
-            pass
-
         segment_idx = int(session.get("segment_idx", 0))
         n_segments = session.get("n_segments")
         if n_segments is not None and segment_idx >= int(n_segments):
@@ -154,6 +222,7 @@ def create_app():
         return render_template(
             "task.html",
             video_path=url_for("static", filename=session["video_path"]),
+            video_mime=guess_video_mime(session["video_path"]),
             target_side=session["target_side"],
             segment_idx=segment_idx,
             n_segments=n_segments,
@@ -165,20 +234,15 @@ def create_app():
 
     @app.post("/init_video")
     def init_video():
-        """
-        Called once from the browser after it loads the video metadata and knows duration.
-        """
         ensure_session()
         duration = request.form.get("duration_sec", type=float)
         if duration is None or duration <= 0:
             abort(400, "Invalid duration")
 
         n_segments = int(math.ceil(duration / SEGMENT_SECONDS))
-
         session["duration_sec"] = float(duration)
         session["n_segments"] = int(n_segments)
 
-        # Save to DB
         g.db.execute(
             "UPDATE runs SET duration_sec=?, n_segments=? WHERE run_id=?",
             (float(duration), int(n_segments), session["run_id"]),
@@ -195,7 +259,6 @@ def create_app():
         if segment_idx < 0:
             abort(400, "Missing segment_idx")
 
-        # Collect emotion ratings 1..7
         ratings = {}
         for e in EMOTIONS:
             key = f"emo_{slug(e)}"
@@ -203,12 +266,12 @@ def create_app():
 
         open_text = request.form.get("open_text", "").strip()
 
-        # Basic validation: require all ratings
-        if any(ratings[e] == "" for e in EMOTIONS):
-            # Re-render with an error
+        moved_ok = all(request.form.get(f"touch_emo_{slug(e)}") == "1" for e in EMOTIONS)
+        if any(ratings[e] == "" for e in EMOTIONS) or not moved_ok:
             return render_template(
                 "task.html",
                 video_path=url_for("static", filename=session["video_path"]),
+                video_mime=guess_video_mime(session["video_path"]),
                 target_side=session["target_side"],
                 segment_idx=segment_idx,
                 n_segments=session.get("n_segments"),
@@ -216,7 +279,7 @@ def create_app():
                 emotions=EMOTIONS,
                 run_id=session["run_id"],
                 video_id=session["video_id"],
-                error="Please answer all emotion ratings before continuing.",
+                error="Please answer all emotion ratings and move every slider before continuing.",
             )
 
         g.db.execute(
@@ -229,7 +292,6 @@ def create_app():
         )
         g.db.commit()
 
-        # Advance to next segment
         session["segment_idx"] = segment_idx + 1
         return redirect(url_for("task"))
 
@@ -240,6 +302,7 @@ def create_app():
             "post.html",
             emotions=EMOTIONS,
             regions=REGIONS,
+            us_states=US_STATES,
             svi_facets=SVI_FACETS,
             target_side=session["target_side"],
         )
@@ -249,39 +312,46 @@ def create_app():
         ensure_session()
         run_id = session["run_id"]
 
-        # Overall emotion ratings
         overall = {}
         for e in EMOTIONS:
             key = f"overall_{slug(e)}"
             overall[e] = request.form.get(key, "").strip()
 
-        if any(overall[e] == "" for e in EMOTIONS):
-            return render_template(
-                "post.html",
-                emotions=EMOTIONS,
-                regions=REGIONS,
-                svi_facets=SVI_FACETS,
-                target_side=session["target_side"],
-                error="Please answer all overall emotion ratings.",
-            )
-
-        origin_guess = {
-            "origin_region": request.form.get("origin_region", "").strip(),
-            "origin_detail": request.form.get("origin_detail", "").strip(),
-        }
-
         svi = {}
         for key, _label in SVI_FACETS:
             svi[key] = request.form.get(key, "").strip()
 
-        if any(svi[k] == "" for k, _ in SVI_FACETS):
+        moved_overall_ok = all(request.form.get(f"touch_overall_{slug(e)}") == "1" for e in EMOTIONS)
+        moved_svi_ok = all(request.form.get(f"touch_{key}") == "1" for key, _ in SVI_FACETS)
+
+        if any(overall[e] == "" for e in EMOTIONS) or not moved_overall_ok:
             return render_template(
                 "post.html",
                 emotions=EMOTIONS,
                 regions=REGIONS,
+                us_states=US_STATES,
                 svi_facets=SVI_FACETS,
                 target_side=session["target_side"],
-                error="Please answer all SVI questions.",
+                error="Please answer all overall emotion ratings and move every slider.",
+            )
+
+        origin_state = request.form.get("origin_state", "").strip()
+        origin_guess = {
+            "origin_region": request.form.get("origin_region", "").strip(),
+            "origin_state": origin_state,
+            # Backward-compatible alias for previous exports/consumers
+            "origin_detail": origin_state,
+        }
+
+        if any(svi[k] == "" for k, _ in SVI_FACETS) or not moved_svi_ok:
+            return render_template(
+                "post.html",
+                emotions=EMOTIONS,
+                regions=REGIONS,
+                us_states=US_STATES,
+                svi_facets=SVI_FACETS,
+                target_side=session["target_side"],
+                error="Please answer all SVI questions and move every slider.",
             )
 
         payload = {
@@ -290,7 +360,7 @@ def create_app():
             "svi": svi,
         }
 
-        completion_code = make_completion_code()
+        completion_code = make_completion_code(session["participant_id"])
 
         g.db.execute(
             "UPDATE runs SET post_json=?, completion_code=?, finished_at_utc=? WHERE run_id=?",
@@ -310,9 +380,6 @@ def create_app():
 
     @app.get("/admin/exports.csv")
     def export_csv():
-        """
-        Minimal export endpoint (no auth). Add auth before real deployment.
-        """
         rows = g.db.execute(
             """
             SELECT r.*, sa.segment_idx, sa.ratings_json, sa.open_text
@@ -322,7 +389,6 @@ def create_app():
             """
         ).fetchall()
 
-        # Build a quick CSV response
         import csv
         from io import StringIO
         from flask import Response
@@ -330,10 +396,10 @@ def create_app():
         out = StringIO()
         w = csv.writer(out)
         w.writerow([
-            "run_id","participant_id","video_id","target_side","created_at_utc",
-            "duration_sec","n_segments","demographics_json",
-            "segment_idx","ratings_json","open_text",
-            "post_json","completion_code","finished_at_utc"
+            "run_id", "participant_id", "video_id", "target_side", "created_at_utc",
+            "duration_sec", "n_segments", "demographics_json",
+            "segment_idx", "ratings_json", "open_text",
+            "post_json", "completion_code", "finished_at_utc"
         ])
         for r in rows:
             w.writerow([
@@ -352,6 +418,65 @@ def create_app():
 def ensure_session():
     if "run_id" not in session:
         abort(403, "No active session. Please start from the home page.")
+
+
+def parse_target_minutes(raw: str):
+    if not raw:
+        return None
+    try:
+        value = float(raw)
+    except ValueError:
+        return None
+    if value <= 0:
+        return None
+    return value
+
+
+def choose_video_assignment(db, video_pool: list[dict], target_minutes=None) -> dict:
+    counts = {
+        row["video_id"]: int(row["cnt"])
+        for row in db.execute(
+            "SELECT video_id, COUNT(*) AS cnt FROM runs GROUP BY video_id"
+        ).fetchall()
+    }
+
+    durations = {
+        row["video_id"]: float(row["avg_duration"])
+        for row in db.execute(
+            """
+            SELECT video_id, AVG(duration_sec) AS avg_duration
+            FROM runs
+            WHERE duration_sec IS NOT NULL
+            GROUP BY video_id
+            """
+        ).fetchall()
+    }
+
+    candidates = list(video_pool)
+    if target_minutes is not None:
+        target_seconds = target_minutes * 60.0
+        filtered = [
+            v for v in candidates
+            if v["video_id"] in durations
+            and abs(durations[v["video_id"]] - target_seconds) <= TARGET_DURATION_TOLERANCE_SEC
+        ]
+        if filtered:
+            candidates = filtered
+
+    min_count = min(counts.get(v["video_id"], 0) for v in candidates)
+    least_annotated = [v for v in candidates if counts.get(v["video_id"], 0) == min_count]
+    return random.choice(least_annotated)
+
+
+def guess_video_mime(video_path: str) -> str:
+    ext = os.path.splitext(video_path)[1].lower()
+    return {
+        ".mp4": "video/mp4",
+        ".webm": "video/webm",
+        ".mov": "video/quicktime",
+        ".m4v": "video/mp4",
+    }.get(ext, "video/mp4")
+
 
 def init_db():
     os.makedirs(DATA_DIR, exist_ok=True)
@@ -393,17 +518,26 @@ def init_db():
     conn.commit()
     conn.close()
 
+
 def slug(s: str) -> str:
     return "".join(ch.lower() if ch.isalnum() else "_" for ch in s).strip("_")
 
-def make_completion_code() -> str:
-    # Short human-typable code
-    return "A-" + uuid.uuid4().hex[:10].upper()
+
+def hash_participant_id(participant_id: str) -> str:
+    return hashlib.sha256(participant_id.encode("utf-8")).hexdigest()[:8].upper()
+
+
+def make_completion_code(participant_id: str) -> str:
+    hashed = hash_participant_id(participant_id)
+    return f"A-{hashed}-{uuid.uuid4().hex[:6].upper()}"
+
 
 def json_dumps(obj) -> str:
     import json
     return json.dumps(obj, ensure_ascii=False)
 
+
 if __name__ == "__main__":
     app = create_app()
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    # threaded=True helps local dev handle multiple participants concurrently.
+    app.run(host="0.0.0.0", port=5000, debug=True, threaded=True)

@@ -220,6 +220,13 @@
     const mark = () => {
       const hid = document.getElementById("touch_" + sl.name);
       if (hid) hid.value = "1";
+
+      const valueId = sl.dataset.valueId;
+      if (valueId) {
+        const out = document.getElementById(valueId);
+        if (out) out.textContent = String(sl.value);
+      }
+
       updateContinue();
     };
     ["input","change","pointerdown","mousedown","touchstart","keydown"].forEach(ev => {

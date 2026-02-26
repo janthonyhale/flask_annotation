@@ -324,9 +324,8 @@ def create_app():
         felt_primary = request.form.get("felt_primary", "").strip()
 
 
-        moved_ok = all(request.form.get(f"touch_emo_{slug(e)}") == "1" for e in EMOTIONS)
         moved_exp_ok = all(request.form.get(f"touch_exp_{k}") == "1" for k, _ in exp_items)
-        if any(ratings[e] == "" for e in EMOTIONS) or not moved_ok or any(exp_ratings[k] == "" for k, _ in exp_items) or not moved_exp_ok or felt_primary == "":
+        if any(exp_ratings[k] == "" for k, _ in exp_items) or not moved_exp_ok or felt_primary == "":
             video_url = session.get("video_url")
             video_path_local = session.get("video_path")
             return render_template(
@@ -340,7 +339,7 @@ def create_app():
                 emotions=EMOTIONS,
                 run_id=session["run_id"],
                 video_id=session["video_id"],
-                error="Please answer all questions, move every slider at least once, and provide your primary felt emotion(s) before continuing.",
+                error="Please answer all segment questions, move every slider at least once, and provide your primary felt emotion(s) before continuing.",
             )
 
         g.db.execute(

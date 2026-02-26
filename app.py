@@ -65,6 +65,7 @@ SVI_FACETS = [
 
 REGIONS = [
     "United States",
+    "China",
     "Canada",
     "UK/Ireland",
     "Europe (other)",
@@ -94,6 +95,11 @@ US_STATES = [
     "North Carolina", "North Dakota", "Ohio", "Oklahoma", "Oregon", "Pennsylvania", "Rhode Island",
     "South Carolina", "South Dakota", "Tennessee", "Texas", "Utah", "Vermont", "Virginia", "Washington",
     "West Virginia", "Wisconsin", "Wyoming", "District of Columbia", "Not in the United States",
+]
+
+
+CHINA_PROVINCES = [
+    "Anhui", "Beijing", "Chongqing", "Fujian", "Gansu", "Guangdong", "Guangxi", "Guizhou", "Hainan", "Hebei", "Heilongjiang", "Henan", "Hong Kong", "Hubei", "Hunan", "Inner Mongolia", "Jiangsu", "Jiangxi", "Jilin", "Liaoning", "Macau", "Ningxia", "Qinghai", "Shaanxi", "Shandong", "Shanghai", "Shanxi", "Sichuan", "Tianjin", "Tibet", "Xinjiang", "Yunnan", "Zhejiang",
 ]
 
 
@@ -146,6 +152,7 @@ def create_app():
         session["run_id"] = run_id
         session["video_id"] = assignment["video_id"]
         session["video_url"] = resolve_video_source(assignment)
+        session["video_path"] = assignment.get("path")
         session["target_side"] = target_side
         session["duration_sec"] = None
         session["n_segments"] = None
@@ -166,7 +173,7 @@ def create_app():
     @app.get("/demographics")
     def demographics():
         ensure_session()
-        return render_template("demographics.html", regions=REGIONS, genders=GENDERS, us_states=US_STATES)
+        return render_template("demographics.html", regions=REGIONS, genders=GENDERS, us_states=US_STATES, china_provinces=CHINA_PROVINCES)
 
     @app.post("/demographics")
     def demographics_post():
@@ -182,6 +189,7 @@ def create_app():
                 regions=REGIONS,
                 genders=GENDERS,
                 us_states=US_STATES,
+                china_provinces=CHINA_PROVINCES,
                 error="Please enter age as a number.",
             )
 
@@ -191,17 +199,42 @@ def create_app():
                 regions=REGIONS,
                 genders=GENDERS,
                 us_states=US_STATES,
+                china_provinces=CHINA_PROVINCES,
                 error="Please enter an age between 18 and 120.",
             )
 
         grew_up_state = request.form.get("grew_up_state", "").strip()
+        grew_up_province = request.form.get("grew_up_province", "").strip()
+        grew_up_region = request.form.get("grew_up_region", "").strip()
+        grew_up_detail = grew_up_state if grew_up_region == "United States" else (grew_up_province if grew_up_region == "China" else "")
+
+        if grew_up_region == "United States" and not grew_up_state:
+            return render_template(
+                "demographics.html",
+                regions=REGIONS,
+                genders=GENDERS,
+                us_states=US_STATES,
+                china_provinces=CHINA_PROVINCES,
+                error="Please select a U.S. state.",
+            )
+
+        if grew_up_region == "China" and not grew_up_province:
+            return render_template(
+                "demographics.html",
+                regions=REGIONS,
+                genders=GENDERS,
+                us_states=US_STATES,
+                china_provinces=CHINA_PROVINCES,
+                error="Please select a Chinese province.",
+            )
         payload = {
             "age": age,
             "gender": request.form.get("gender", "").strip(),
-            "grew_up_region": request.form.get("grew_up_region", "").strip(),
+            "grew_up_region": grew_up_region,
             "grew_up_state": grew_up_state,
+            "grew_up_province": grew_up_province,
             # Backward-compatible alias for previous exports/consumers
-            "grew_up_detail": grew_up_state,
+            "grew_up_detail": grew_up_detail,
             "native_language": request.form.get("native_language", "").strip(),
         }
 
@@ -216,16 +249,20 @@ def create_app():
     @app.get("/task")
     def task():
         ensure_session()
-        ensure_video_in_session()
         segment_idx = int(session.get("segment_idx", 0))
         n_segments = session.get("n_segments")
+        if not n_segments and session.get("duration_sec"):
+            n_segments = int(math.ceil(float(session["duration_sec"]) / SEGMENT_SECONDS))
         if n_segments is not None and segment_idx >= int(n_segments):
             return redirect(url_for("post_dialog"))
 
+        video_url = session.get("video_url")
+        video_path_local = session.get("video_path")
+
         return render_template(
             "task.html",
-            video_path=url_for("static", filename=session["video_path"]),
-            video_mime=guess_video_mime(session["video_path"]),
+            video_path=video_url,
+            video_mime=guess_video_mime(video_path_local) if video_path_local else "video/mp4",
             target_side=session["target_side"],
             segment_idx=segment_idx,
             n_segments=n_segments,
@@ -238,7 +275,6 @@ def create_app():
     @app.post("/init_video")
     def init_video():
         ensure_session()
-        ensure_video_in_session()
         duration = request.form.get("duration_sec", type=float)
         if duration is None or duration <= 0:
             abort(400, "Invalid duration")
@@ -258,7 +294,6 @@ def create_app():
     @app.post("/submit_segment")
     def submit_segment():
         ensure_session()
-        ensure_video_in_session()
         run_id = session["run_id"]
         segment_idx = int(request.form.get("segment_idx", -1))
         if segment_idx < 0:
@@ -271,12 +306,33 @@ def create_app():
 
         open_text = request.form.get("open_text", "").strip()
 
+
+        exp_items = [
+            ("anger", "I showed anger at partner"),
+            ("compassion", "I showed compassion for partner"),
+            ("joy", "I showed joy"),
+            ("fear_anxiety", "I showed fear/anxiety"),
+            ("sadness", "I showed sadness"),
+            ("hide_feelings", "I tried to hide my feelings"),
+            ("different_than_felt", "I showed emotion different than I felt"),
+        ]
+        exp_ratings = {}
+        for slug_key, _label in exp_items:
+            form_key = f"exp_{slug_key}"
+            exp_ratings[slug_key] = request.form.get(form_key, "").strip()
+
+        felt_primary = request.form.get("felt_primary", "").strip()
+
+
         moved_ok = all(request.form.get(f"touch_emo_{slug(e)}") == "1" for e in EMOTIONS)
-        if any(ratings[e] == "" for e in EMOTIONS) or not moved_ok:
+        moved_exp_ok = all(request.form.get(f"touch_exp_{k}") == "1" for k, _ in exp_items)
+        if any(ratings[e] == "" for e in EMOTIONS) or not moved_ok or any(exp_ratings[k] == "" for k, _ in exp_items) or not moved_exp_ok or felt_primary == "":
+            video_url = session.get("video_url")
+            video_path_local = session.get("video_path")
             return render_template(
                 "task.html",
-                video_path=url_for("static", filename=session["video_path"]),
-                video_mime=guess_video_mime(session["video_path"]),
+                video_path=video_url,
+                video_mime=guess_video_mime(video_path_local) if video_path_local else "video/mp4",
                 target_side=session["target_side"],
                 segment_idx=segment_idx,
                 n_segments=session.get("n_segments"),
@@ -284,7 +340,7 @@ def create_app():
                 emotions=EMOTIONS,
                 run_id=session["run_id"],
                 video_id=session["video_id"],
-                error="Please answer all emotion ratings and move every slider before continuing.",
+                error="Please answer all questions, move every slider at least once, and provide your primary felt emotion(s) before continuing.",
             )
 
         g.db.execute(
@@ -293,7 +349,7 @@ def create_app():
                 run_id, segment_idx, ratings_json, open_text, created_at_utc
             ) VALUES (?,?,?,?,?)
             """,
-            (run_id, segment_idx, json_dumps(ratings), open_text, datetime.utcnow().isoformat()),
+            (run_id, segment_idx, json_dumps({"target_emotions": ratings, "expressed_items": exp_ratings, "felt_primary": felt_primary, "notes": open_text}), open_text, datetime.utcnow().isoformat()),
         )
         g.db.commit()
 
@@ -467,24 +523,6 @@ def normalize_google_drive_url(url: str) -> str:
 def ensure_session():
     if "run_id" not in session:
         abort(403, "No active session. Please start from the home page.")
-
-
-def ensure_video_in_session():
-    """Backfill video_path for old/in-flight sessions created before migration."""
-    if session.get("video_path"):
-        return
-
-    video_id = session.get("video_id")
-    if not video_id:
-        abort(403, "No active video assignment. Please start from the home page.")
-
-    video_pool = load_video_pool_from_static()
-    for video in video_pool:
-        if video["video_id"] == video_id:
-            session["video_path"] = video["path"]
-            return
-
-    abort(400, "Assigned video is no longer available in static/videos.")
 
 
 def parse_target_minutes(raw: str):

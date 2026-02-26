@@ -4,10 +4,63 @@
   <meta charset="utf-8">
   <title>Segment {{ segment_idx + 1 }}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+
+  <style>
+    /* Page fit + 50/50 layout */
+    body { margin: 0; }
+    .container.widest { max-width: 1500px; padding: 12px 14px; }
+    h1 { margin: 6px 0 6px; font-size: 22px; }
+    h2 { margin: 6px 0 6px; font-size: 14px; }
+    .instructions { margin: 6px 0 8px; font-size: 13px; line-height: 1.25; }
+    .task-layout { display:flex; gap: 14px; align-items: flex-start; }
+    .task-video-col { flex: 0 0 50%; }
+    .task-form-col { flex: 0 0 50%; overflow-x: hidden; padding-left: 10px; }
+
+    /* Video sizing + wrapper actually shrink */
+    .video-wrap { position: relative; width: 100%; aspect-ratio: 16/9; max-height: 360px; overflow: hidden; border-radius: 12px; }
+    #vid { width: 100%; height: 100%; object-fit: cover; display:block; }
+
+    /* Highlight overlay: left uses left=0, right uses left=50% (robust against left:0 defaults) */
+    .video-wrap .highlight {
+      position:absolute; top:0; bottom:0; width:50%;
+      border: 4px solid red; border-radius: 12px; box-sizing:border-box;
+      pointer-events:none;
+      left: 0;
+    }
+    .video-wrap .highlight.right { left: 50% !important; }
+
+    .video-wrap .pause-overlay { position:absolute; inset:0; display:none; align-items:center; justify-content:center; text-align:center; padding:14px; background: rgba(0,0,0,0.45); color:#fff; font-weight:600; }
+
+    /* Meta chips */
+    .meta-bar { margin-top: 6px; font-size: 13px; display:flex; align-items:center; justify-content:space-between; gap:10px; }
+    .meta-left { display:flex; gap:8px; align-items:center; flex-wrap: wrap; }
+    .meta-chip { padding: 3px 8px; border-radius: 999px; background: rgba(0,0,0,0.06); font-size: 12.5px; white-space: nowrap; }
+
+    /* Questions grid */
+    .slider-grid { display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 10px; }
+    .slider-q { padding: 4px 6px !important; margin: 0 !important; min-width:0; }
+    .slider-q label { font-size: 12px; line-height: 1.15; margin-bottom: 3px; display:block; word-break: break-word; }
+    .slider-q .hint { font-size: 10.5px; margin-top: 2px; opacity: 0.85; }
+    input[type="range"] { width: 100%; height: 16px; }
+
+    textarea { width: 100%; box-sizing: border-box; font-size: 12.5px; }
+    #felt_primary { width:100%; }
+
+    /* Continue button disabled look */
+    #continueBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    @media (max-width: 1100px) {
+      .task-layout { flex-direction: column; }
+      .task-video-col, .task-form-col { flex: 1 1 100%; padding-left:0; }
+      .video-wrap { max-height: 420px; }
+      .slider-grid { display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 10px; }
+    }
+  </style>
+
 </head>
 <body>
   <div class="container widest">
-    <h1>Segment {{ segment_idx + 1 }}{% if n_segments %} / {{ n_segments }}{% endif %}</h1>
+    <h1>Segment <span class="js-current-seg">{{ segment_idx + 1 }}</span>/<span class="js-total-seg">?</span></h1>
 
     <div class="instructions">
       <strong>Important:</strong> You will see both people. <u>Only rate emotions for the person inside the red box</u>.
@@ -20,14 +73,30 @@
 
     <div class="task-layout">
       <div class="task-video-col">
-        <div class="video-wrap">
-          <video id="vid" controls preload="metadata" playsinline>
+        <div class="video-wrap" style="position:relative;">
+          <video id="vid" preload="metadata" playsinline>
             <source src="{{ video_path }}" type="{{ video_mime }}">
             Your browser does not support the video tag.
           </video>
 
           <div id="highlight" class="highlight {{ target_side }}"></div>
+
+          <div id="pauseOverlay" class="pause-overlay" style="display:none; position:absolute; inset:0; background: rgba(0,0,0,0.45); color:#fff; align-items:center; justify-content:center; text-align:center; padding:18px; font-size:16px; font-weight:600;">
+            Segment complete. Please answer the questions on the right to continue.
+          </div>
+
         </div>
+
+
+        <div class="custom-controls" style="margin-top: 10px; display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+          <button type="button" id="playBtn" class="btn" style="padding:10px 14px;">Play</button>
+          <div class="meta-left" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+            <span class="meta-chip">Seg <strong class="js-current-seg">{{ segment_idx + 1 }}</strong>/<strong class="js-total-seg">?</strong></span>
+            <span class="meta-chip">1 min each</span>
+            <span class="meta-chip">Time left: <strong><span class="js-time-left">--:--</span></strong></span>
+          </div>
+        </div>
+
 
         <div class="segment-status" id="segmentStatus">
           This segment will pause automatically at <span id="endTimeLabel"></span>.
@@ -37,26 +106,38 @@
       <div class="task-form-col">
         <form id="segmentForm" method="post" action="{{ url_for('submit_segment') }}">
           <input type="hidden" name="segment_idx" value="{{ segment_idx }}">
-
-          <h2>Rate the highlighted person’s emotions in the <em>most recent 1-minute segment</em></h2>
+          <h2>Indicate what emotion the <strong>highlighted person</strong> expressed in this 1-minute segment</h2>
 
           <div class="slider-grid">
-            {% for e in emotions %}
-              {% set key = (e|lower)|replace('/','_')|replace(' ','_')|replace('-','_') %}
+            {% set expressed_qs = [
+              ("anger", "The highlighted person showed anger at their partner"),
+              ("compassion", "The highlighted person showed compassion for their partner"),
+              ("joy", "The highlighted person showed joy"),
+              ("fear_anxiety", "The highlighted person showed fear/anxiety"),
+              ("sadness", "The highlighted person showed sadness"),
+              ("hide_feelings", "The highlighted person tried to hide their feelings"),
+              ("different_than_felt", "The highlighted person showed emotion different than they felt"),
+            ] %}
+            {% for key, label in expressed_qs %}
               <div class="q slider-q">
-                <label for="emo_{{ key }}">{{ e }}: <span id="val_emo_{{ key }}">4</span></label>
-                <input id="emo_{{ key }}" type="range" min="1" max="7" step="1" value="4"
-                       name="emo_{{ key }}" class="rating-slider" data-value-id="val_emo_{{ key }}" data-touch-id="touch_emo_{{ key }}" required>
-                <input type="hidden" id="touch_emo_{{ key }}" name="touch_emo_{{ key }}" value="0">
+                <label for="exp_{{ key }}">{{ label }}: <span id="val_exp_{{ key }}">4</span></label>
+                <input id="exp_{{ key }}" type="range" min="1" max="7" step="1" value="4"
+                       name="exp_{{ key }}" class="rating-slider"
+                       data-value-id="val_exp_{{ key }}" data-touch-id="touch_exp_{{ key }}">
+                <input type="hidden" id="touch_exp_{{ key }}" name="touch_exp_{{ key }}" value="0">
                 <div class="hint">1 = Not at all, 7 = Extremely</div>
               </div>
             {% endfor %}
           </div>
 
-          <label>Open-ended (optional): What happened emotionally in this segment?</label>
-          <textarea name="open_text" rows="3" placeholder="Optional notes..."></textarea>
+          <label for="felt_primary"><strong>What was the primary emotion(s) the highlighted person likely FELT during this segment?</strong></label>
+          <textarea id="felt_primary" name="felt_primary" rows="2" placeholder="e.g., frustration + disappointment"></textarea>
 
-          <button id="continueBtn" class="btn" type="submit" disabled>Continue to Next Segment</button>
+
+
+          <button id="continueBtn" class="btn" type="button" disabled>Continue to Next Segment</button>
+</div>
+
         </form>
       </div>
     </div>
@@ -66,100 +147,198 @@
 (function(){
   const SEGMENT_SECONDS = {{ segment_seconds|int }};
   const segmentIdx = {{ segment_idx|int }};
+
   const vid = document.getElementById("vid");
+  const playBtn = document.getElementById("playBtn");
   const form = document.getElementById("segmentForm");
   const continueBtn = document.getElementById("continueBtn");
   const status = document.getElementById("segmentStatus");
+  const endTimeLabel = document.getElementById("endTimeLabel");
+  const pauseOverlay = document.getElementById("pauseOverlay");
 
+  // ---- Make "Continue" immune to browser validation messages ----
+  // (Those messages come from HTML5 constraint validation on submit buttons.)
+  if (form) form.noValidate = true;
+  if (continueBtn) continueBtn.type = "button"; // never triggers native validation popups
+  // ---- Time-left display ----
+  const timeLeftEls = Array.from(document.querySelectorAll(".js-time-left"));
+
+  // ---- Segment totals ----
+  const totalSegEls = Array.from(document.querySelectorAll(".js-total-seg"));
+  function setTotalSegments(n){
+    if (!n || !isFinite(n) || n <= 0) return;
+    totalSegEls.forEach(el => el.textContent = String(n));
+  }
+
+  // ---- Formatting ----
+  function fmt(sec){
+    const s = Math.max(0, Math.floor(sec));
+    const m = Math.floor(s/60);
+    const r = s % 60;
+    return `${m}:${String(r).padStart(2,'0')}`;
+  }
+  function setTimeLeft(sec){
+    const txt = fmt(sec);
+    timeLeftEls.forEach(el => el.textContent = txt);
+  }
+
+  // ---- Compute segment bounds once metadata is available ----
   let initialized = false;
   let segmentStart = segmentIdx * SEGMENT_SECONDS;
   let segmentEnd = (segmentIdx + 1) * SEGMENT_SECONDS;
-  let segmentFinished = false;
+  let segmentDone = false;
 
-  function fmt(t){
-    const m = Math.floor(t/60);
-    const s = Math.floor(t%60);
-    return `${m}:${String(s).padStart(2,'0')}`;
+  // ---- Answer tracking (touch hidden fields + felt text) ----
+  function allAnswered(){
+    const sliders = Array.from(document.querySelectorAll('input[type="range"][name^="exp_"]'));
+    if (!sliders.length) return false;
+
+    const slidersOk = sliders.every(sl => {
+      const hid = document.getElementById("touch_" + sl.name);
+      return hid && hid.value === "1";
+    });
+
+    const felt = document.getElementById("felt_primary");
+    const feltOk = !!felt && felt.value.trim().length > 0;
+
+    return slidersOk && feltOk;
   }
 
-  function allSlidersMoved(){
-    return Array.from(document.querySelectorAll('input[type="hidden"][id^="touch_emo_"]')).every((x) => x.value === "1");
+  function isPlaying(){
+    return !!vid && !vid.paused && !vid.ended;
   }
 
-  function maybeEnableForm(){
-    if (segmentFinished && allSlidersMoved()) {
-      continueBtn.disabled = false;
-      status.innerHTML = "Segment finished and all sliders moved. You can continue.";
-    } else if (segmentFinished) {
-      continueBtn.disabled = true;
-      status.innerHTML = "Segment finished. Move every slider at least once before continuing.";
-    }
+  function updateContinue(){
+    if (!continueBtn) return;
+    const ok = initialized && segmentDone && !isPlaying() && allAnswered();
+    continueBtn.disabled = !ok;
   }
 
-  async function initVideoMetadata(){
-    const fd = new FormData();
-    fd.append("duration_sec", vid.duration);
-    await fetch("{{ url_for('init_video') }}", { method: "POST", body: fd });
-  }
-
-  // Make it obvious we require a click
-  continueBtn.disabled = true;
-  vid.controls = false;
-
-  vid.addEventListener("loadedmetadata", async () => {
-    if (initialized) return;
-    initialized = true;
-
-    if (segmentEnd > vid.duration) segmentEnd = vid.duration;
-    endTimeLabel.textContent = fmt(segmentEnd);
-    await initVideoMetadata();
-
-    vid.currentTime = segmentStart;
-    lockTime = segmentStart;
-    vid.pause();
-    setTimeout(() => { programmaticSeek = false; }, 0);
-
-    continueBtn.disabled = true;
-    status.innerHTML = `Click play. The video will pause automatically at ${fmt(segmentEnd)}. Seeking is disabled.`;
-  });
-
-  vid.addEventListener("timeupdate", () => {
-    if (!initialized) return;
-
-    if (vid.currentTime >= segmentEnd - 0.05 && !segmentFinished) {
-      segmentFinished = true;
-      vid.pause();
-      vid.currentTime = segmentEnd;
-      maybeEnableForm();
-    }
-  });
-
-  vid.addEventListener("error", () => {
-    const mediaError = vid.error;
-    let detail = "unknown video error";
-    if (mediaError && mediaError.code === 4) detail = "the source could not be loaded as playable media";
-    if (mediaError && mediaError.code === 3) detail = "media decoding failed";
-    status.innerHTML = `Video failed to load (${detail}). Please verify the video file exists and is a valid media format.`;
-  });
-
-  document.querySelectorAll('.rating-slider').forEach((slider) => {
-    const valueId = slider.dataset.valueId;
-    const touchId = slider.dataset.touchId;
-    const out = document.getElementById(valueId);
-    const touch = document.getElementById(touchId);
-    slider.addEventListener('input', () => {
-      out.textContent = slider.value;
-      touch.value = "1";
-      maybeEnableForm();
+  // Mark sliders "touched"
+  const sliders = Array.from(document.querySelectorAll('input[type="range"][name^="exp_"]'));
+  sliders.forEach(sl => {
+    const mark = () => {
+      const hid = document.getElementById("touch_" + sl.name);
+      if (hid) hid.value = "1";
+      updateContinue();
+    };
+    ["input","change","pointerdown","mousedown","touchstart","keydown"].forEach(ev => {
+      sl.addEventListener(ev, mark, { passive: true });
     });
   });
 
-  form.addEventListener('submit', (ev) => {
-    if (!segmentFinished || !allSlidersMoved()) {
-      ev.preventDefault();
-      maybeEnableForm();
+  // Felt text
+  const felt = document.getElementById("felt_primary");
+  if (felt){
+    felt.addEventListener("input", updateContinue);
+    felt.addEventListener("change", updateContinue);
+  }
+
+  // ---- Click = proceed (when enabled), no extra checks, no restarts ----
+  if (continueBtn && form){
+    continueBtn.addEventListener("click", () => {
+      if (continueBtn.disabled) return;
+      // Bypass any submit listeners + browser validation:
+      form.submit();
+    });
+  }
+
+  // ---- Play/Pause control ----
+  function setPlayLabel(){
+    if (!playBtn) return;
+    playBtn.textContent = isPlaying() ? "Pause" : "Play";
+  }
+
+  async function ensureMetadata(){
+    if (initialized) return;
+    // Some browsers won't populate duration until load() is called.
+    try { vid.load(); } catch(e) {}
+    await new Promise((resolve) => {
+      if (vid.readyState >= 1 && isFinite(vid.duration) && vid.duration > 0) return resolve();
+      const done = () => { cleanup(); resolve(); };
+      const cleanup = () => {
+        vid.removeEventListener("loadedmetadata", done);
+        vid.removeEventListener("durationchange", done);
+        vid.removeEventListener("canplay", done);
+      };
+      vid.addEventListener("loadedmetadata", done, { once: true });
+      vid.addEventListener("durationchange", done, { once: true });
+      vid.addEventListener("canplay", done, { once: true });
+    });
+
+    initialized = true;
+
+    // Clamp to duration
+    if (segmentStart > vid.duration) segmentStart = Math.max(0, vid.duration - SEGMENT_SECONDS);
+    segmentEnd = Math.min(segmentEnd, vid.duration);
+
+    setTotalSegments(Math.max(1, Math.ceil(vid.duration / SEGMENT_SECONDS)));
+    endTimeLabel.textContent = fmt(segmentEnd);
+    setTimeLeft(segmentEnd - segmentStart);
+
+    // Seek to start (no autoplay)
+    try { vid.pause(); } catch(e) {}
+    try { vid.currentTime = segmentStart; } catch(e) {}
+
+    if (status) status.textContent = `Press Play. The video will pause automatically at ${fmt(segmentEnd)}.`;
+    setPlayLabel();
+    updateContinue();
+  }
+
+  if (playBtn){
+    playBtn.addEventListener("click", async () => {
+      await ensureMetadata();
+
+      if (segmentDone) return;
+
+      // Keep within the segment
+      if (vid.currentTime < segmentStart || vid.currentTime > segmentEnd){
+        try { vid.currentTime = segmentStart; } catch(e) {}
+      }
+
+      if (vid.paused){
+        try { await vid.play(); } catch(e) {}
+      } else {
+        try { vid.pause(); } catch(e) {}
+      }
+      setPlayLabel();
+      updateContinue();
+    });
+  }
+
+  vid.addEventListener("play", () => { setPlayLabel(); updateContinue(); });
+  vid.addEventListener("pause", () => { setPlayLabel(); updateContinue(); });
+
+  // ---- Auto-stop at segment end ----
+  vid.addEventListener("timeupdate", () => {
+    if (!initialized) return;
+
+    const left = segmentEnd - vid.currentTime;
+    setTimeLeft(left);
+
+    if (!segmentDone && vid.currentTime >= segmentEnd - 0.05){
+      segmentDone = true;
+      try { vid.pause(); } catch(e) {}
+      try { vid.currentTime = segmentEnd; } catch(e) {}
+
+      // Visual "segment complete" cues (unchanged from your intent)
+      vid.style.filter = "grayscale(1)";
+      vid.style.opacity = "0.45";
+      if (pauseOverlay) pauseOverlay.style.display = "flex";
+      if (status) status.textContent = "Segment complete. Please answer the questions on the right to continue.";
+      if (playBtn) { playBtn.disabled = true; playBtn.textContent = "Segment complete"; }
+
+      setTimeLeft(0);
+      updateContinue();
     }
   });
+
+  // Init metadata early so top "?" becomes N (but does NOT autoplay)
+  ensureMetadata();
+
+  // Initial state
+  setPlayLabel();
+  updateContinue();
 })();
 </script>
 

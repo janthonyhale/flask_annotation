@@ -33,13 +33,27 @@
         {% endfor %}
       </select>
 
-      <label>If United States, which state?</label>
-      <select name="grew_up_state" required>
-        <option value="" selected disabled>Choose...</option>
-        {% for s in us_states %}
-          <option value="{{ s }}">{{ s }}</option>
-        {% endfor %}
-      </select>
+
+      <div id="usStateWrap" style="display:none;">
+        <label>If United States, which state?</label>
+        <select name="grew_up_state" id="grew_up_state">
+          <option value="" selected disabled>Choose...</option>
+          {% for s in us_states %}
+            <option value="{{ s }}">{{ s }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div id="chinaProvWrap" style="display:none;">
+        <label>If China, which province?</label>
+        <select name="grew_up_province" id="grew_up_province">
+          <option value="" selected disabled>Choose...</option>
+          {% for p in china_provinces %}
+            <option value="{{ p }}">{{ p }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
 
       <label>Native language</label>
       <input name="native_language" required>
@@ -47,5 +61,35 @@
       <button class="btn" type="submit">Continue</button>
     </form>
   </div>
+
+  <script>
+    (function(){
+      const regionSel = document.querySelector('select[name="grew_up_region"]');
+      const usWrap = document.getElementById('usStateWrap');
+      const cnWrap = document.getElementById('chinaProvWrap');
+      const usSel = document.getElementById('grew_up_state');
+      const cnSel = document.getElementById('grew_up_province');
+
+      function sync(){
+        const v = regionSel.value;
+        const isUS = (v === "United States");
+        const isCN = (v === "China");
+
+        usWrap.style.display = isUS ? "block" : "none";
+        cnWrap.style.display = isCN ? "block" : "none";
+
+        if (usSel) usSel.required = isUS;
+        if (cnSel) cnSel.required = isCN;
+
+        if (!isUS && usSel) usSel.value = "";
+        if (!isCN && cnSel) cnSel.value = "";
+      }
+
+      regionSel.addEventListener('change', sync);
+      // Initialize on load (in case browser restores form state)
+      sync();
+    })();
+  </script>
+
 </body>
 </html>

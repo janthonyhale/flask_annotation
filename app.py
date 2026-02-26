@@ -5,6 +5,8 @@ import random
 import sqlite3
 import hashlib
 from datetime import datetime
+from urllib.parse import urlparse, parse_qs, unquote
+from urllib.parse import urlparse, parse_qs, unquote
 from flask import Flask, render_template, request, redirect, url_for, session, g, abort
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -143,7 +145,7 @@ def create_app():
         session["participant_id"] = participant_id
         session["run_id"] = run_id
         session["video_id"] = assignment["video_id"]
-        session["video_path"] = assignment["path"]
+        session["video_url"] = resolve_video_source(assignment)
         session["target_side"] = target_side
         session["duration_sec"] = None
         session["n_segments"] = None
@@ -221,8 +223,12 @@ def create_app():
 
         return render_template(
             "task.html",
+<<<<<<< codex/update-annotation-task-layout-and-features-qf13jz
             video_path=url_for("static", filename=session["video_path"]),
             video_mime=guess_video_mime(session["video_path"]),
+=======
+            video_url=session["video_url"],
+>>>>>>> main
             target_side=session["target_side"],
             segment_idx=segment_idx,
             n_segments=n_segments,
@@ -270,8 +276,12 @@ def create_app():
         if any(ratings[e] == "" for e in EMOTIONS) or not moved_ok:
             return render_template(
                 "task.html",
+<<<<<<< codex/update-annotation-task-layout-and-features-qf13jz
                 video_path=url_for("static", filename=session["video_path"]),
                 video_mime=guess_video_mime(session["video_path"]),
+=======
+                video_url=session["video_url"],
+>>>>>>> main
                 target_side=session["target_side"],
                 segment_idx=segment_idx,
                 n_segments=session.get("n_segments"),
@@ -413,6 +423,50 @@ def create_app():
     return app
 
 
+def resolve_video_source(assignment: dict) -> str:
+    if assignment.get("url"):
+        return normalize_google_drive_url(assignment["url"])
+    if assignment.get("path"):
+        return url_for("static", filename=assignment["path"])
+    abort(500, "Invalid VIDEO_POOL entry: expected 'url' or 'path'.")
+
+
+def normalize_google_drive_url(url: str) -> str:
+    """
+    Convert common Google Drive sharing URLs into a more video-player-friendly direct URL.
+    We preserve resource keys when present, since some files require them.
+    """
+    parsed = urlparse(url)
+    if "drive.google.com" not in parsed.netloc:
+        return url
+
+    query = parse_qs(parsed.query)
+
+    # /file/d/<id>/view?resourcekey=...
+    path_parts = [p for p in parsed.path.split("/") if p]
+    file_id = None
+    if "file" in path_parts and "d" in path_parts:
+        d_idx = path_parts.index("d")
+        if d_idx + 1 < len(path_parts):
+            file_id = unquote(path_parts[d_idx + 1])
+
+    # /open?id=<id> or /uc?id=<id>
+    if file_id is None:
+        query_id = query.get("id", [])
+        if query_id:
+            file_id = query_id[0]
+
+    if not file_id:
+        return url
+
+    base = f"https://drive.google.com/uc?export=download&id={file_id}&confirm=t"
+    resource_key = query.get("resourcekey", [])
+    if resource_key:
+        base += f"&resourcekey={resource_key[0]}"
+
+    return base
+
+
 # ----------------- Helpers -----------------
 
 def ensure_session():
@@ -468,6 +522,7 @@ def choose_video_assignment(db, video_pool: list[dict], target_minutes=None) -> 
     return random.choice(least_annotated)
 
 
+<<<<<<< codex/update-annotation-task-layout-and-features-qf13jz
 def guess_video_mime(video_path: str) -> str:
     ext = os.path.splitext(video_path)[1].lower()
     return {
@@ -478,6 +533,8 @@ def guess_video_mime(video_path: str) -> str:
     }.get(ext, "video/mp4")
 
 
+=======
+>>>>>>> main
 def init_db():
     os.makedirs(DATA_DIR, exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
@@ -531,6 +588,10 @@ def make_completion_code(participant_id: str) -> str:
     hashed = hash_participant_id(participant_id)
     return f"A-{hashed}-{uuid.uuid4().hex[:6].upper()}"
 
+<<<<<<< codex/update-annotation-task-layout-and-features-qf13jz
+=======
+
+>>>>>>> main
 
 def json_dumps(obj) -> str:
     import json

@@ -70,7 +70,6 @@
   const form = document.getElementById("segmentForm");
   const continueBtn = document.getElementById("continueBtn");
   const status = document.getElementById("segmentStatus");
-  const endTimeLabel = document.getElementById("endTimeLabel");
 
   let initialized = false;
   let segmentStart = segmentIdx * SEGMENT_SECONDS;
@@ -103,6 +102,10 @@
     await fetch("{{ url_for('init_video') }}", { method: "POST", body: fd });
   }
 
+  // Make it obvious we require a click
+  continueBtn.disabled = true;
+  vid.controls = false;
+
   vid.addEventListener("loadedmetadata", async () => {
     if (initialized) return;
     initialized = true;
@@ -112,10 +115,12 @@
     await initVideoMetadata();
 
     vid.currentTime = segmentStart;
+    lockTime = segmentStart;
     vid.pause();
+    setTimeout(() => { programmaticSeek = false; }, 0);
 
     continueBtn.disabled = true;
-    status.innerHTML = `Click play. The video will pause automatically at ${fmt(segmentEnd)}.`;
+    status.innerHTML = `Click play. The video will pause automatically at ${fmt(segmentEnd)}. Seeking is disabled.`;
   });
 
   vid.addEventListener("timeupdate", () => {

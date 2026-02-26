@@ -19,12 +19,6 @@
     {% endif %}
 
     <form method="post" id="postForm">
-
-          </div>
-        {% endfor %}
-      </div>
-
-
       <h2>Indicate what emotion the highlighted person expressed during the entire dialogue</h2>
 
       <div class="slider-grid">
@@ -57,21 +51,33 @@
 
 
       <h2>Origin guess</h2>
-      <label>Best guess: where is this person from?</label>
-      <select name="origin_region" required>
+      <label>Best guess: which country is this person from?</label>
+      <select name="origin_region" id="origin_region" required>
         <option value="" selected disabled>Choose...</option>
         {% for r in regions %}
           <option value="{{ r }}">{{ r }}</option>
         {% endfor %}
       </select>
 
-      <label>If United States, which state?</label>
-      <select name="origin_state" required>
-        <option value="" selected disabled>Choose...</option>
-        {% for s in us_states %}
-          <option value="{{ s }}">{{ s }}</option>
-        {% endfor %}
-      </select>
+      <div id="originStateWrap" style="display:none;">
+        <label>If United States, which state?</label>
+        <select name="origin_state" id="origin_state">
+          <option value="" selected disabled>Choose...</option>
+          {% for s in us_states %}
+            <option value="{{ s }}">{{ s }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div id="originProvinceWrap" style="display:none;">
+        <label>If China, which province?</label>
+        <select name="origin_province" id="origin_province">
+          <option value="" selected disabled>Choose...</option>
+          {% for p in china_provinces %}
+            <option value="{{ p }}">{{ p }}</option>
+          {% endfor %}
+        </select>
+      </div>
 
       <h2>SVI (single items)</h2>
       {% for key, label in svi_facets %}
@@ -112,6 +118,35 @@
         alert('Please move every slider at least once before submitting.');
       }
     });
+
+    (function(){
+      const countrySel = document.getElementById('origin_region');
+      const stateWrap = document.getElementById('originStateWrap');
+      const provWrap = document.getElementById('originProvinceWrap');
+      const stateSel = document.getElementById('origin_state');
+      const provSel = document.getElementById('origin_province');
+
+      function syncOrigin(){
+        if (!countrySel) return;
+        const v = countrySel.value;
+        const isUS = (v === 'United States');
+        const isCN = (v === 'China');
+
+        if (stateWrap) stateWrap.style.display = isUS ? 'block' : 'none';
+        if (provWrap) provWrap.style.display = isCN ? 'block' : 'none';
+
+        if (stateSel) stateSel.required = isUS;
+        if (provSel) provSel.required = isCN;
+
+        if (!isUS && stateSel) stateSel.value = '';
+        if (!isCN && provSel) provSel.value = '';
+      }
+
+      if (countrySel) {
+        countrySel.addEventListener('change', syncOrigin);
+        syncOrigin();
+      }
+    })();
   </script>
 </body>
 </html>

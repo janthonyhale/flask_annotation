@@ -64,20 +64,204 @@ SVI_FACETS = [
 ]
 
 REGIONS = [
-    "United States",
-    "China",
+    "Afghanistan",
+    "Albania",
+    "Algeria",
+    "Andorra",
+    "Angola",
+    "Antigua and Barbuda",
+    "Argentina",
+    "Armenia",
+    "Australia",
+    "Austria",
+    "Azerbaijan",
+    "Bahamas",
+    "Bahrain",
+    "Bangladesh",
+    "Barbados",
+    "Belarus",
+    "Belgium",
+    "Belize",
+    "Benin",
+    "Bhutan",
+    "Bolivia",
+    "Bosnia and Herzegovina",
+    "Botswana",
+    "Brazil",
+    "Brunei",
+    "Bulgaria",
+    "Burkina Faso",
+    "Burundi",
+    "Cabo Verde",
+    "Cambodia",
+    "Cameroon",
     "Canada",
-    "UK/Ireland",
-    "Europe (other)",
-    "Latin America",
-    "East Asia",
-    "South Asia",
-    "Southeast Asia",
-    "Middle East",
-    "Africa",
-    "Oceania",
-    "Other / Prefer not to say",
+    "Central African Republic",
+    "Chad",
+    "Chile",
+    "China",
+    "Colombia",
+    "Comoros",
+    "Congo",
+    "Costa Rica",
+    "Cote d'Ivoire",
+    "Croatia",
+    "Cuba",
+    "Cyprus",
+    "Czechia",
+    "Democratic Republic of the Congo",
+    "Denmark",
+    "Djibouti",
+    "Dominica",
+    "Dominican Republic",
+    "Ecuador",
+    "Egypt",
+    "El Salvador",
+    "Equatorial Guinea",
+    "Eritrea",
+    "Estonia",
+    "Eswatini",
+    "Ethiopia",
+    "Fiji",
+    "Finland",
+    "France",
+    "Gabon",
+    "Gambia",
+    "Georgia",
+    "Germany",
+    "Ghana",
+    "Greece",
+    "Grenada",
+    "Guatemala",
+    "Guinea",
+    "Guinea-Bissau",
+    "Guyana",
+    "Haiti",
+    "Honduras",
+    "Hungary",
+    "Iceland",
+    "India",
+    "Indonesia",
+    "Iran",
+    "Iraq",
+    "Ireland",
+    "Israel",
+    "Italy",
+    "Jamaica",
+    "Japan",
+    "Jordan",
+    "Kazakhstan",
+    "Kenya",
+    "Kiribati",
+    "Kuwait",
+    "Kyrgyzstan",
+    "Laos",
+    "Latvia",
+    "Lebanon",
+    "Lesotho",
+    "Liberia",
+    "Libya",
+    "Liechtenstein",
+    "Lithuania",
+    "Luxembourg",
+    "Madagascar",
+    "Malawi",
+    "Malaysia",
+    "Maldives",
+    "Mali",
+    "Malta",
+    "Marshall Islands",
+    "Mauritania",
+    "Mauritius",
+    "Mexico",
+    "Micronesia",
+    "Moldova",
+    "Monaco",
+    "Mongolia",
+    "Montenegro",
+    "Morocco",
+    "Mozambique",
+    "Myanmar",
+    "Namibia",
+    "Nauru",
+    "Nepal",
+    "Netherlands",
+    "New Zealand",
+    "Nicaragua",
+    "Niger",
+    "Nigeria",
+    "North Korea",
+    "North Macedonia",
+    "Norway",
+    "Oman",
+    "Pakistan",
+    "Palau",
+    "Panama",
+    "Papua New Guinea",
+    "Paraguay",
+    "Peru",
+    "Philippines",
+    "Poland",
+    "Portugal",
+    "Qatar",
+    "Romania",
+    "Russia",
+    "Rwanda",
+    "Saint Kitts and Nevis",
+    "Saint Lucia",
+    "Saint Vincent and the Grenadines",
+    "Samoa",
+    "San Marino",
+    "Sao Tome and Principe",
+    "Saudi Arabia",
+    "Senegal",
+    "Serbia",
+    "Seychelles",
+    "Sierra Leone",
+    "Singapore",
+    "Slovakia",
+    "Slovenia",
+    "Solomon Islands",
+    "Somalia",
+    "South Africa",
+    "South Korea",
+    "South Sudan",
+    "Spain",
+    "Sri Lanka",
+    "Sudan",
+    "Suriname",
+    "Sweden",
+    "Switzerland",
+    "Syria",
+    "Tajikistan",
+    "Tanzania",
+    "Thailand",
+    "Timor-Leste",
+    "Togo",
+    "Tonga",
+    "Trinidad and Tobago",
+    "Tunisia",
+    "Turkey",
+    "Turkmenistan",
+    "Tuvalu",
+    "Uganda",
+    "Ukraine",
+    "United Arab Emirates",
+    "United Kingdom",
+    "United States",
+    "Uruguay",
+    "Uzbekistan",
+    "Vanuatu",
+    "Vatican City",
+    "Venezuela",
+    "Vietnam",
+    "Yemen",
+    "Zambia",
+    "Zimbabwe",
+    "Prefer not to say",
 ]
+
+
 
 GENDERS = [
     "Female",
@@ -299,6 +483,14 @@ def create_app():
         if segment_idx < 0:
             abort(400, "Missing segment_idx")
 
+        current_segment_idx = int(session.get("segment_idx", 0))
+        if segment_idx != current_segment_idx:
+            segment_idx = current_segment_idx
+
+        n_segments = session.get("n_segments")
+        if n_segments is not None and segment_idx >= int(n_segments):
+            return redirect(url_for("post_dialog"))
+
         ratings = {}
         for e in EMOTIONS:
             key = f"emo_{slug(e)}"
@@ -324,9 +516,8 @@ def create_app():
         felt_primary = request.form.get("felt_primary", "").strip()
 
 
-        moved_ok = all(request.form.get(f"touch_emo_{slug(e)}") == "1" for e in EMOTIONS)
         moved_exp_ok = all(request.form.get(f"touch_exp_{k}") == "1" for k, _ in exp_items)
-        if any(ratings[e] == "" for e in EMOTIONS) or not moved_ok or any(exp_ratings[k] == "" for k, _ in exp_items) or not moved_exp_ok or felt_primary == "":
+        if any(exp_ratings[k] == "" for k, _ in exp_items) or not moved_exp_ok or felt_primary == "":
             video_url = session.get("video_url")
             video_path_local = session.get("video_path")
             return render_template(
@@ -340,7 +531,7 @@ def create_app():
                 emotions=EMOTIONS,
                 run_id=session["run_id"],
                 video_id=session["video_id"],
-                error="Please answer all questions, move every slider at least once, and provide your primary felt emotion(s) before continuing.",
+                error="Please answer all segment questions, move every slider at least once, and provide your primary felt emotion(s) before continuing.",
             )
 
         g.db.execute(
@@ -353,7 +544,12 @@ def create_app():
         )
         g.db.commit()
 
-        session["segment_idx"] = segment_idx + 1
+        next_segment_idx = segment_idx + 1
+        session["segment_idx"] = next_segment_idx
+
+        if n_segments is not None and next_segment_idx >= int(n_segments):
+            return redirect(url_for("post_dialog"))
+
         return redirect(url_for("task"))
 
     @app.get("/post_dialog")
@@ -364,6 +560,7 @@ def create_app():
             emotions=EMOTIONS,
             regions=REGIONS,
             us_states=US_STATES,
+            china_provinces=CHINA_PROVINCES,
             svi_facets=SVI_FACETS,
             target_side=session["target_side"],
         )
@@ -374,34 +571,48 @@ def create_app():
         run_id = session["run_id"]
 
         overall = {}
-        for e in EMOTIONS:
-            key = f"overall_{slug(e)}"
-            overall[e] = request.form.get(key, "").strip()
 
         svi = {}
         for key, _label in SVI_FACETS:
             svi[key] = request.form.get(key, "").strip()
 
-        moved_overall_ok = all(request.form.get(f"touch_overall_{slug(e)}") == "1" for e in EMOTIONS)
         moved_svi_ok = all(request.form.get(f"touch_{key}") == "1" for key, _ in SVI_FACETS)
 
-        if any(overall[e] == "" for e in EMOTIONS) or not moved_overall_ok:
+        origin_region = request.form.get("origin_region", "").strip()
+        origin_state = request.form.get("origin_state", "").strip()
+        origin_province = request.form.get("origin_province", "").strip()
+
+        if origin_region == "United States" and not origin_state:
             return render_template(
                 "post.html",
                 emotions=EMOTIONS,
                 regions=REGIONS,
                 us_states=US_STATES,
+                china_provinces=CHINA_PROVINCES,
                 svi_facets=SVI_FACETS,
                 target_side=session["target_side"],
-                error="Please answer all overall emotion ratings and move every slider.",
+                error="Please select a U.S. state.",
             )
 
-        origin_state = request.form.get("origin_state", "").strip()
+        if origin_region == "China" and not origin_province:
+            return render_template(
+                "post.html",
+                emotions=EMOTIONS,
+                regions=REGIONS,
+                us_states=US_STATES,
+                china_provinces=CHINA_PROVINCES,
+                svi_facets=SVI_FACETS,
+                target_side=session["target_side"],
+                error="Please select a Chinese province.",
+            )
+
+        origin_detail = origin_state if origin_region == "United States" else (origin_province if origin_region == "China" else "")
         origin_guess = {
-            "origin_region": request.form.get("origin_region", "").strip(),
+            "origin_region": origin_region,
             "origin_state": origin_state,
+            "origin_province": origin_province,
             # Backward-compatible alias for previous exports/consumers
-            "origin_detail": origin_state,
+            "origin_detail": origin_detail,
         }
 
         if any(svi[k] == "" for k, _ in SVI_FACETS) or not moved_svi_ok:
@@ -410,6 +621,7 @@ def create_app():
                 emotions=EMOTIONS,
                 regions=REGIONS,
                 us_states=US_STATES,
+                china_provinces=CHINA_PROVINCES,
                 svi_facets=SVI_FACETS,
                 target_side=session["target_side"],
                 error="Please answer all SVI questions and move every slider.",

@@ -155,6 +155,7 @@
   const status = document.getElementById("segmentStatus");
   const endTimeLabel = document.getElementById("endTimeLabel");
   const pauseOverlay = document.getElementById("pauseOverlay");
+  let sentVideoInit = false;
 
   // ---- Make "Continue" immune to browser validation messages ----
   // (Those messages come from HTML5 constraint validation on submit buttons.)
@@ -274,6 +275,18 @@
     });
 
     initialized = true;
+
+    if (!sentVideoInit && isFinite(vid.duration) && vid.duration > 0) {
+      sentVideoInit = true;
+      const data = new URLSearchParams();
+      data.set("duration_sec", String(vid.duration));
+      fetch("{{ url_for('init_video') }}", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: data.toString(),
+        credentials: "same-origin",
+      }).catch(() => {});
+    }
 
     // Clamp to duration
     if (segmentStart > vid.duration) segmentStart = Math.max(0, vid.duration - SEGMENT_SECONDS);

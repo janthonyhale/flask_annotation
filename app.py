@@ -299,6 +299,14 @@ def create_app():
         if segment_idx < 0:
             abort(400, "Missing segment_idx")
 
+        current_segment_idx = int(session.get("segment_idx", 0))
+        if segment_idx != current_segment_idx:
+            segment_idx = current_segment_idx
+
+        n_segments = session.get("n_segments")
+        if n_segments is not None and segment_idx >= int(n_segments):
+            return redirect(url_for("post_dialog"))
+
         ratings = {}
         for e in EMOTIONS:
             key = f"emo_{slug(e)}"
@@ -352,7 +360,12 @@ def create_app():
         )
         g.db.commit()
 
-        session["segment_idx"] = segment_idx + 1
+        next_segment_idx = segment_idx + 1
+        session["segment_idx"] = next_segment_idx
+
+        if n_segments is not None and next_segment_idx >= int(n_segments):
+            return redirect(url_for("post_dialog"))
+
         return redirect(url_for("task"))
 
     @app.get("/post_dialog")

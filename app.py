@@ -643,7 +643,7 @@ def create_app():
                 china_provinces=CHINA_PROVINCES,
                 svi_facets=SVI_FACETS,
                 target_side=session["target_side"],
-                error="Please answer all final questions and move every slider at least once.",
+                error="Please answer all final questions and interact with every slider at least once.",
             )
 
         payload = {

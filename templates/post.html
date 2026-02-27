@@ -23,13 +23,13 @@
 
       <div class="slider-grid">
         {% set self_qs = [
-          ("anger", "I showed anger at partner"),
-          ("compassion", "I showed compassion for partner"),
-          ("joy", "I showed joy"),
-          ("fear_anxiety", "I showed fear/anxiety"),
-          ("sadness", "I showed sadness"),
-          ("hide_feelings", "I tried to hide my feelings"),
-          ("different_than_felt", "I showed emotion different than I felt"),
+          ("anger", "They showed anger toward their partner"),
+          ("compassion", "They showed compassion for their partner"),
+          ("joy", "They showed joy"),
+          ("fear_anxiety", "They showed fear/anxiety"),
+          ("sadness", "They showed sadness"),
+          ("hide_feelings", "They tried to hide their feelings"),
+          ("different_than_felt", "They showed emotion different from what they felt"),
         ] %}
         {% for key, label in self_qs %}
           <div class="q slider-q">
@@ -47,7 +47,7 @@
         <strong>What was the primary emotion(s) the highlighted person likely FELT during the entire dialogue?</strong>
       </label>
       <textarea id="felt_primary_overall" name="felt_primary_overall" rows="3"
-                placeholder="e.g., frustration + disappointment" required></textarea>
+                required></textarea>
 
 
       <h2>Origin guess</h2>
@@ -106,16 +106,21 @@
       const touchId = slider.dataset.touchId;
       const out = document.getElementById(valueId);
       const touch = document.getElementById(touchId);
-      slider.addEventListener('input', () => {
-        out.textContent = slider.value;
-        touch.value = '1';
+
+      const markTouched = () => {
+        if (out) out.textContent = slider.value;
+        if (touch) touch.value = '1';
+      };
+
+      ['input', 'change', 'pointerdown', 'mousedown', 'touchstart', 'keydown', 'click'].forEach((evt) => {
+        slider.addEventListener(evt, markTouched, { passive: true });
       });
     });
 
     form.addEventListener('submit', (ev) => {
       if (!allMoved()) {
         ev.preventDefault();
-        alert('Please move every slider at least once before submitting.');
+        alert('Please interact with every slider at least once before submitting.');
       }
     });
 

@@ -327,8 +327,7 @@ def create_app():
                 t_value=request.form.get("t", "").strip(),
             )
 
-        assignment = choose_video_assignment(g.db, video_pool, t_minutes)
-        target_side = random.choice(["left", "right"])
+        assignment, target_side = choose_video_assignment(g.db, participant_id, video_pool, t_minutes)
         run_id = str(uuid.uuid4())
 
         session.clear()
@@ -770,11 +769,19 @@ def parse_target_minutes(raw: str):
     return value
 
 
-def choose_video_assignment(db, video_pool: list[dict], target_minutes=None) -> dict:
-    counts = {
-        row["video_id"]: int(row["cnt"])
+def choose_video_assignment(db, participant_id: str, video_pool: list[dict], target_minutes=None) -> tuple[dict, str]:
+    pair_counts = {
+        (row["video_id"], row["target_side"]): int(row["cnt"])
         for row in db.execute(
-            "SELECT video_id, COUNT(*) AS cnt FROM runs GROUP BY video_id"
+            "SELECT video_id, target_side, COUNT(*) AS cnt FROM runs GROUP BY video_id, target_side"
+        ).fetchall()
+    }
+
+    seen_pairs = {
+        (row["video_id"], row["target_side"])
+        for row in db.execute(
+            "SELECT video_id, target_side FROM runs WHERE participant_id=?",
+            (participant_id,),
         ).fetchall()
     }
 
@@ -790,20 +797,35 @@ def choose_video_assignment(db, video_pool: list[dict], target_minutes=None) -> 
         ).fetchall()
     }
 
-    candidates = list(video_pool)
+    candidate_videos = list(video_pool)
     if target_minutes is not None:
         target_seconds = target_minutes * 60.0
         filtered = [
-            v for v in candidates
+            v for v in candidate_videos
             if v["video_id"] in durations
             and abs(durations[v["video_id"]] - target_seconds) <= TARGET_DURATION_TOLERANCE_SEC
         ]
         if filtered:
-            candidates = filtered
+            candidate_videos = filtered
 
-    min_count = min(counts.get(v["video_id"], 0) for v in candidates)
-    least_annotated = [v for v in candidates if counts.get(v["video_id"], 0) == min_count]
-    return random.choice(least_annotated)
+    candidate_pairs = []
+    for video in candidate_videos:
+        for side in ("left", "right"):
+            pair_key = (video["video_id"], side)
+            if pair_key in seen_pairs:
+                continue
+            candidate_pairs.append((video, side))
+
+    if not candidate_pairs:
+        abort(400, "No eligible video/side assignment remains for this participant.")
+
+    min_count = min(pair_counts.get((video["video_id"], side), 0) for video, side in candidate_pairs)
+    least_annotated_pairs = [
+        (video, side)
+        for video, side in candidate_pairs
+        if pair_counts.get((video["video_id"], side), 0) == min_count
+    ]
+    return random.choice(least_annotated_pairs)
 
 
 def guess_video_mime(video_path: str) -> str:

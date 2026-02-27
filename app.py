@@ -570,7 +570,21 @@ def create_app():
         ensure_session()
         run_id = session["run_id"]
 
+        overall_items = [
+            ("anger", "I showed anger at partner"),
+            ("compassion", "I showed compassion for partner"),
+            ("joy", "I showed joy"),
+            ("fear_anxiety", "I showed fear/anxiety"),
+            ("sadness", "I showed sadness"),
+            ("hide_feelings", "I tried to hide my feelings"),
+            ("different_than_felt", "I showed emotion different than I felt"),
+        ]
         overall = {}
+        for key, _label in overall_items:
+            overall[key] = request.form.get(f"self_overall_{key}", "").strip()
+
+        felt_primary_overall = request.form.get("felt_primary_overall", "").strip()
+        moved_overall_ok = all(request.form.get(f"touch_self_overall_{key}") == "1" for key, _ in overall_items)
 
         svi = {}
         for key, _label in SVI_FACETS:
@@ -615,7 +629,13 @@ def create_app():
             "origin_detail": origin_detail,
         }
 
-        if any(svi[k] == "" for k, _ in SVI_FACETS) or not moved_svi_ok:
+        if (
+            any(overall[k] == "" for k, _ in overall_items)
+            or felt_primary_overall == ""
+            or not moved_overall_ok
+            or any(svi[k] == "" for k, _ in SVI_FACETS)
+            or not moved_svi_ok
+        ):
             return render_template(
                 "post.html",
                 emotions=EMOTIONS,
@@ -624,11 +644,12 @@ def create_app():
                 china_provinces=CHINA_PROVINCES,
                 svi_facets=SVI_FACETS,
                 target_side=session["target_side"],
-                error="Please answer all SVI questions and move every slider.",
+                error="Please answer all final questions and move every slider at least once.",
             )
 
         payload = {
             "overall_emotions": overall,
+            "felt_primary_overall": felt_primary_overall,
             "origin_guess": origin_guess,
             "svi": svi,
         }

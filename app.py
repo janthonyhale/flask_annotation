@@ -327,8 +327,7 @@ def create_app():
                 t_value=request.form.get("t", "").strip(),
             )
 
-        assignment = choose_video_assignment(g.db, video_pool, t_minutes)
-        target_side = random.choice(["left", "right"])
+        assignment, target_side = choose_video_assignment(g.db, participant_id, video_pool, t_minutes)
         run_id = str(uuid.uuid4())
 
         session.clear()
@@ -570,7 +569,21 @@ def create_app():
         ensure_session()
         run_id = session["run_id"]
 
+        overall_items = [
+            ("anger", "I showed anger at partner"),
+            ("compassion", "I showed compassion for partner"),
+            ("joy", "I showed joy"),
+            ("fear_anxiety", "I showed fear/anxiety"),
+            ("sadness", "I showed sadness"),
+            ("hide_feelings", "I tried to hide my feelings"),
+            ("different_than_felt", "I showed emotion different than I felt"),
+        ]
         overall = {}
+        for key, _label in overall_items:
+            overall[key] = request.form.get(f"self_overall_{key}", "").strip()
+
+        felt_primary_overall = request.form.get("felt_primary_overall", "").strip()
+        moved_overall_ok = all(request.form.get(f"touch_self_overall_{key}") == "1" for key, _ in overall_items)
 
         svi = {}
         for key, _label in SVI_FACETS:
@@ -615,7 +628,13 @@ def create_app():
             "origin_detail": origin_detail,
         }
 
-        if any(svi[k] == "" for k, _ in SVI_FACETS) or not moved_svi_ok:
+        if (
+            any(overall[k] == "" for k, _ in overall_items)
+            or felt_primary_overall == ""
+            or not moved_overall_ok
+            or any(svi[k] == "" for k, _ in SVI_FACETS)
+            or not moved_svi_ok
+        ):
             return render_template(
                 "post.html",
                 emotions=EMOTIONS,
@@ -624,11 +643,12 @@ def create_app():
                 china_provinces=CHINA_PROVINCES,
                 svi_facets=SVI_FACETS,
                 target_side=session["target_side"],
-                error="Please answer all SVI questions and move every slider.",
+                error="Please answer all final questions and move every slider at least once.",
             )
 
         payload = {
             "overall_emotions": overall,
+            "felt_primary_overall": felt_primary_overall,
             "origin_guess": origin_guess,
             "svi": svi,
         }
@@ -749,11 +769,19 @@ def parse_target_minutes(raw: str):
     return value
 
 
-def choose_video_assignment(db, video_pool: list[dict], target_minutes=None) -> dict:
-    counts = {
-        row["video_id"]: int(row["cnt"])
+def choose_video_assignment(db, participant_id: str, video_pool: list[dict], target_minutes=None) -> tuple[dict, str]:
+    pair_counts = {
+        (row["video_id"], row["target_side"]): int(row["cnt"])
         for row in db.execute(
-            "SELECT video_id, COUNT(*) AS cnt FROM runs GROUP BY video_id"
+            "SELECT video_id, target_side, COUNT(*) AS cnt FROM runs GROUP BY video_id, target_side"
+        ).fetchall()
+    }
+
+    seen_pairs = {
+        (row["video_id"], row["target_side"])
+        for row in db.execute(
+            "SELECT video_id, target_side FROM runs WHERE participant_id=?",
+            (participant_id,),
         ).fetchall()
     }
 
@@ -769,20 +797,35 @@ def choose_video_assignment(db, video_pool: list[dict], target_minutes=None) -> 
         ).fetchall()
     }
 
-    candidates = list(video_pool)
+    candidate_videos = list(video_pool)
     if target_minutes is not None:
         target_seconds = target_minutes * 60.0
         filtered = [
-            v for v in candidates
+            v for v in candidate_videos
             if v["video_id"] in durations
             and abs(durations[v["video_id"]] - target_seconds) <= TARGET_DURATION_TOLERANCE_SEC
         ]
         if filtered:
-            candidates = filtered
+            candidate_videos = filtered
 
-    min_count = min(counts.get(v["video_id"], 0) for v in candidates)
-    least_annotated = [v for v in candidates if counts.get(v["video_id"], 0) == min_count]
-    return random.choice(least_annotated)
+    candidate_pairs = []
+    for video in candidate_videos:
+        for side in ("left", "right"):
+            pair_key = (video["video_id"], side)
+            if pair_key in seen_pairs:
+                continue
+            candidate_pairs.append((video, side))
+
+    if not candidate_pairs:
+        abort(400, "No eligible video/side assignment remains for this participant.")
+
+    min_count = min(pair_counts.get((video["video_id"], side), 0) for video, side in candidate_pairs)
+    least_annotated_pairs = [
+        (video, side)
+        for video, side in candidate_pairs
+        if pair_counts.get((video["video_id"], side), 0) == min_count
+    ]
+    return random.choice(least_annotated_pairs)
 
 
 def guess_video_mime(video_path: str) -> str:

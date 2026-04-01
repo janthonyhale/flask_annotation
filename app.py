@@ -5,8 +5,7 @@ import random
 import sqlite3
 import hashlib
 from datetime import datetime
-from urllib.parse import urlparse, parse_qs, unquote
-from urllib.parse import urlparse, parse_qs, unquote
+from urllib.parse import urlparse, parse_qs, unquote, quote
 from flask import Flask, render_template, request, redirect, url_for, session, g, abort
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -16,7 +15,18 @@ DB_PATH = os.path.join(DATA_DIR, "annotations.db")
 SEGMENT_SECONDS = 60  # 1-minute segments
 
 # --- Configure your video pool here ---
-# Videos are auto-discovered from static/videos/.
+# Add one entry per line in data/video_sources.txt.
+# Entry formats:
+#   - Full URL: https://...
+#   - S3 object key or filename: folder/my_video.mp4
+#   - Explicit ID + source: my_video,https://...
+#
+# For non-URL entries, we build a URL using this S3 bucket.
+S3_BUCKET_NAME = os.environ.get("VIDEO_S3_BUCKET", "kodis-video")
+S3_BASE_URL = f"https://{S3_BUCKET_NAME}.s3.amazonaws.com"
+VIDEO_LIST_PATH = os.path.join(DATA_DIR, "video_sources.txt")
+
+# Legacy local static fallback (if no configured source list exists).
 # Supported extensions: .mp4, .webm, .mov, .m4v
 VIDEO_EXTENSIONS = {".mp4", ".webm", ".mov", ".m4v"}
 
@@ -40,6 +50,64 @@ def load_video_pool_from_static() -> list[dict]:
 
         video_id = os.path.splitext(name)[0]
         pool.append({"video_id": video_id, "path": f"videos/{name}"})
+    return pool
+
+
+def parse_video_source_line(raw_line: str, line_number: int) -> dict | None:
+    line = raw_line.strip()
+    if not line or line.startswith("#"):
+        return None
+
+    video_id = None
+    source = line
+
+    if "," in line:
+        left, right = line.split(",", 1)
+        if left.strip() and right.strip():
+            video_id = left.strip()
+            source = right.strip()
+
+    if source.startswith(("http://", "https://")):
+        url = source
+    else:
+        object_key = source.lstrip("/")
+        if not object_key:
+            return None
+        encoded_key = quote(object_key, safe="/")
+        url = f"{S3_BASE_URL}/{encoded_key}"
+
+    if not video_id:
+        parsed = urlparse(url)
+        filename = os.path.basename(parsed.path).strip()
+        video_id = os.path.splitext(filename)[0] if filename else ""
+
+    if not video_id:
+        short_hash = hashlib.sha1(f"{line_number}:{line}".encode("utf-8")).hexdigest()[:8]
+        video_id = f"video_{short_hash}"
+
+    return {"video_id": video_id, "url": url}
+
+
+def load_video_pool_from_config() -> list[dict]:
+    if not os.path.isfile(VIDEO_LIST_PATH):
+        return []
+
+    pool = []
+    seen_ids = set()
+    with open(VIDEO_LIST_PATH, "r", encoding="utf-8") as f:
+        for idx, raw_line in enumerate(f, start=1):
+            parsed = parse_video_source_line(raw_line, idx)
+            if not parsed:
+                continue
+            original_id = parsed["video_id"]
+            dedup_id = original_id
+            n = 2
+            while dedup_id in seen_ids:
+                dedup_id = f"{original_id}_{n}"
+                n += 1
+            parsed["video_id"] = dedup_id
+            seen_ids.add(dedup_id)
+            pool.append(parsed)
     return pool
 
 
@@ -318,11 +386,16 @@ def create_app():
             abort(400, "Unique ID is required")
 
         t_minutes = parse_target_minutes(request.form.get("t", "").strip())
-        video_pool = load_video_pool_from_static()
+        video_pool = load_video_pool_from_config()
+        if not video_pool:
+            video_pool = load_video_pool_from_static()
         if not video_pool:
             return render_template(
                 "index.html",
-                error="No videos found. Add files to static/videos (e.g., .mp4, .webm).",
+                error=(
+                    "No videos found. Add entries to data/video_sources.txt "
+                    "(one S3 key or URL per line), or add local files to static/videos."
+                ),
                 prefill_id=participant_id,
                 t_value=request.form.get("t", "").strip(),
             )
@@ -440,12 +513,11 @@ def create_app():
             return redirect(url_for("post_dialog"))
 
         video_url = session.get("video_url")
-        video_path_local = session.get("video_path")
 
         return render_template(
             "task.html",
             video_path=video_url,
-            video_mime=guess_video_mime(video_path_local) if video_path_local else "video/mp4",
+            video_mime=guess_video_mime(video_url) if video_url else "video/mp4",
             target_side=session["target_side"],
             segment_idx=segment_idx,
             n_segments=n_segments,
@@ -518,11 +590,10 @@ def create_app():
         moved_exp_ok = all(request.form.get(f"touch_exp_{k}") == "1" for k, _ in exp_items)
         if any(exp_ratings[k] == "" for k, _ in exp_items) or not moved_exp_ok or felt_primary == "":
             video_url = session.get("video_url")
-            video_path_local = session.get("video_path")
             return render_template(
                 "task.html",
                 video_path=video_url,
-                video_mime=guess_video_mime(video_path_local) if video_path_local else "video/mp4",
+                video_mime=guess_video_mime(video_url) if video_url else "video/mp4",
                 target_side=session["target_side"],
                 segment_idx=segment_idx,
                 n_segments=session.get("n_segments"),
@@ -829,7 +900,8 @@ def choose_video_assignment(db, participant_id: str, video_pool: list[dict], tar
 
 
 def guess_video_mime(video_path: str) -> str:
-    ext = os.path.splitext(video_path)[1].lower()
+    parsed = urlparse(video_path)
+    ext = os.path.splitext(parsed.path)[1].lower()
     return {
         ".mp4": "video/mp4",
         ".webm": "video/webm",

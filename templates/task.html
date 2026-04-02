@@ -146,7 +146,11 @@
 <script>
 (function(){
   const SEGMENT_SECONDS = {{ segment_seconds|int }};
+  const segmentOverlapSeconds = {{ segment_overlap_seconds|int }};
+  const segmentStrideSeconds = {{ segment_stride_seconds|int }};
   const segmentIdx = {{ segment_idx|int }};
+  const backendSegmentStart = {{ segment_start_sec|float }};
+  const backendSegmentEnd = {{ segment_end_sec|float }};
 
   const vid = document.getElementById("vid");
   const playBtn = document.getElementById("playBtn");
@@ -185,8 +189,8 @@
 
   // ---- Compute segment bounds once metadata is available ----
   let initialized = false;
-  let segmentStart = segmentIdx * SEGMENT_SECONDS;
-  let segmentEnd = (segmentIdx + 1) * SEGMENT_SECONDS;
+  let segmentStart = backendSegmentStart;
+  let segmentEnd = backendSegmentEnd;
   let segmentDone = false;
 
   // ---- Answer tracking (touch hidden fields + felt text) ----
@@ -292,7 +296,8 @@
     if (segmentStart > vid.duration) segmentStart = Math.max(0, vid.duration - SEGMENT_SECONDS);
     segmentEnd = Math.min(segmentEnd, vid.duration);
 
-    setTotalSegments(Math.max(1, Math.ceil(vid.duration / SEGMENT_SECONDS)));
+    const computedTotalSegments = Math.max(1, Math.ceil(Math.max(0, vid.duration - SEGMENT_SECONDS) / segmentStrideSeconds) + 1);
+    setTotalSegments(computedTotalSegments);
     endTimeLabel.textContent = fmt(segmentEnd);
     setTimeLeft(segmentEnd - segmentStart);
 
@@ -300,7 +305,12 @@
     try { vid.pause(); } catch(e) {}
     try { vid.currentTime = segmentStart; } catch(e) {}
 
-    if (status) status.textContent = `Press Play. The video will pause automatically at ${fmt(segmentEnd)}.`;
+    if (status) {
+      const overlapMsg = segmentIdx > 0 && segmentOverlapSeconds > 0
+        ? ` This segment includes the last ${segmentOverlapSeconds} second${segmentOverlapSeconds === 1 ? "" : "s"} of the previous segment.`
+        : "";
+      status.textContent = `Press Play. This segment runs from ${fmt(segmentStart)} to ${fmt(segmentEnd)} and will pause automatically at ${fmt(segmentEnd)}.` + overlapMsg;
+    }
     setPlayLabel();
     updateContinue();
   }

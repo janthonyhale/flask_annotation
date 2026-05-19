@@ -2,15 +2,13 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Video Emotion Annotation</title>
+  <title>{{ "视频情绪标注" if lang == "cn" else "Video Emotion Annotation" }}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
 </head>
 <body>
   <div class="container">
-    <h1>Video Emotion Annotation</h1>
-    <p>You will watch a customer-service dispute between a buyer and seller (split-screen) concerning an online purchase.
-       We want you to watch the conversation and rate the emotions of the target person -- you will see both sides but you should focus on rating just the indicated person.
-    You will watch a series of one minute segments and rate each segment before answering some general questions at the end.</p>
+    <h1>{{ "视频情绪标注" if lang == "cn" else "Video Emotion Annotation" }}</h1>
+    <p>{% if lang == "cn" %}你将观看一段买家和卖家围绕网购产生的客服纠纷（分屏显示）。请观看对话，并为指定人物的情绪打分——画面中会出现双方，但只需要关注被指定的人。视频分为多个 1 分钟片段，请先为每个片段评分，最后再回答几道总体问题。{% else %}You will watch a customer-service dispute between a buyer and seller (split-screen) concerning an online purchase. We want you to watch the conversation and rate the emotions of the target person -- you will see both sides but you should focus on rating just the indicated person. You will watch a series of one minute segments and rate each segment before answering some general questions at the end.{% endif %}</p>
 
     {% if error %}
       <div class="error">{{ error }}</div>
@@ -19,7 +17,7 @@
     <form method="post" action="{{ url_for('start') }}">
       <input type="hidden" name="t" value="{{ t_value or '' }}">
 
-      <label for="participant_id">Unique ID</label>
+      <label for="participant_id">{{ "唯一标识符" if lang == "cn" else "Unique ID" }}</label>
       <input id="participant_id" name="participant_id" required
              placeholder="Enter your unique participant ID" value="{{ prefill_id or '' }}">
 

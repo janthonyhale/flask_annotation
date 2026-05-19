@@ -2,13 +2,13 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Done</title>
+  <title>{{ "完成" if lang == "cn" else "Done" }}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
 </head>
 <body>
   <div class="container">
-    <h1>All done — thank you!</h1>
-    <p>Return this completion code:</p>
+    <h1>{{ "已完成——感谢参与！" if lang == "cn" else "All done — thank you!" }}</h1>
+    <p>{{ "请返回此完成代码：" if lang == "cn" else "Return this completion code:" }}</p>
     <div class="code">{{ code }}</div>
   </div>
 </body>

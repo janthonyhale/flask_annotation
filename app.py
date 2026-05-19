@@ -487,7 +487,7 @@ def create_app():
     @app.get("/demographics")
     def demographics():
         ensure_session()
-        return render_template("demographics.html", regions=REGIONS, genders=GENDERS, us_states=US_STATES, china_provinces=CHINA_PROVINCES)
+        return render_template("demographics.html", regions=REGIONS, genders=GENDERS, us_states=US_STATES, china_provinces=CHINA_PROVINCES, lang=get_lang())
 
     @app.post("/demographics")
     def demographics_post():
@@ -504,7 +504,8 @@ def create_app():
                 genders=GENDERS,
                 us_states=US_STATES,
                 china_provinces=CHINA_PROVINCES,
-                error="Please enter age as a number.",
+                lang=get_lang(),
+                error=("请输入数字年龄。" if get_lang() == "cn" else "Please enter age as a number."),
             )
 
         if age < 18 or age > 120:
@@ -514,7 +515,8 @@ def create_app():
                 genders=GENDERS,
                 us_states=US_STATES,
                 china_provinces=CHINA_PROVINCES,
-                error="Please enter an age between 18 and 120.",
+                lang=get_lang(),
+                error=("请输入 18 到 120 之间的年龄。" if get_lang() == "cn" else "Please enter an age between 18 and 120."),
             )
 
         grew_up_state = request.form.get("grew_up_state", "").strip()
@@ -529,7 +531,8 @@ def create_app():
                 genders=GENDERS,
                 us_states=US_STATES,
                 china_provinces=CHINA_PROVINCES,
-                error="Please select a U.S. state.",
+                lang=get_lang(),
+                error=("请选择一个美国州。" if get_lang() == "cn" else "Please select a U.S. state."),
             )
 
         if grew_up_region == "China" and not grew_up_province:
@@ -539,7 +542,8 @@ def create_app():
                 genders=GENDERS,
                 us_states=US_STATES,
                 china_provinces=CHINA_PROVINCES,
-                error="Please select a Chinese province.",
+                lang=get_lang(),
+                error=("请选择一个中国省份。" if get_lang() == "cn" else "Please select a Chinese province."),
             )
         payload = {
             "age": age,
@@ -597,6 +601,7 @@ def create_app():
             emotions=EMOTIONS,
             run_id=session["run_id"],
             video_id=session["video_id"],
+            lang=get_lang(),
         )
 
     @app.post("/init_video")
@@ -686,7 +691,8 @@ def create_app():
                 emotions=EMOTIONS,
                 run_id=session["run_id"],
                 video_id=session["video_id"],
-                error="Please answer all segment questions, move every slider at least once, and provide your primary felt emotion(s) before continuing.",
+                lang=get_lang(),
+                error=("请回答所有片段问题，至少拖动每个滑块一次，并填写该片段最主要的内心情绪后再继续。" if get_lang() == "cn" else "Please answer all segment questions, move every slider at least once, and provide your primary felt emotion(s) before continuing."),
             )
 
         g.db.execute(
@@ -842,7 +848,7 @@ def create_app():
         run_id = session["run_id"]
         row = g.db.execute("SELECT completion_code FROM runs WHERE run_id=?", (run_id,)).fetchone()
         code = row["completion_code"] if row else None
-        return render_template("done.html", code=code)
+        return render_template("done.html", code=code, lang=get_lang())
 
     @app.get("/admin/exports.csv")
     def export_csv():

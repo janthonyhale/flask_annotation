@@ -2,16 +2,16 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Final Questions</title>
+  <title>{{ "最后的问题（整个对话）" if lang == "cn" else "Final Questions" }}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
 </head>
 <body>
   <div class="container">
-    <h1>Final Questions (Entire Dialogue)</h1>
+    <h1>{{ "最后的问题（整个对话）" if lang == "cn" else "Final Questions (Entire Dialogue)" }}</h1>
 
     <div class="instructions">
-      <strong>Reminder:</strong> Rate only the person you were assigned to (the highlighted {{ target_side }} side).
-      Move every slider at least once before submitting.
+      <strong>{{ "提醒：" if lang == "cn" else "Reminder:" }}</strong> {{ "只评定指定人物（红框中的一侧）。" if lang == "cn" else "Rate only the person you were assigned to (the highlighted " ~ target_side ~ " side)." }}
+      {{ "提交前，每个滑块都请至少拖动一次。" if lang == "cn" else "Move every slider at least once before submitting." }}
     </div>
 
     {% if error %}
@@ -19,17 +19,18 @@
     {% endif %}
 
     <form method="post" id="postForm">
-      <h2>Indicate what emotion the highlighted person expressed during the entire dialogue</h2>
+      <input type="hidden" name="lang" value="{{ lang }}">
+      <h2>{{ "请判断红框中的人在整个对话中表现出的情绪。" if lang == "cn" else "Indicate what emotion the highlighted person expressed during the entire dialogue." }}</h2>
 
       <div class="slider-grid">
         {% set self_qs = [
-          ("anger", "They showed anger toward their partner"),
-          ("compassion", "They showed compassion for their partner"),
-          ("joy", "They showed joy"),
-          ("fear_anxiety", "They showed fear/anxiety"),
-          ("sadness", "They showed sadness"),
-          ("hide_feelings", "They tried to hide their feelings"),
-          ("different_than_felt", "They showed emotion different from what they felt"),
+          ("anger", "红框中的人对对方表现出愤怒" if lang == "cn" else "They showed anger toward their partner"),
+          ("compassion", "红框中的人对对方表现出同情或关心" if lang == "cn" else "They showed compassion for their partner"),
+          ("joy", "红框中的人表现出快乐" if lang == "cn" else "They showed joy"),
+          ("fear_anxiety", "红框中的人表现出害怕或焦虑" if lang == "cn" else "They showed fear/anxiety"),
+          ("sadness", "红框中的人表现出难过" if lang == "cn" else "They showed sadness"),
+          ("hide_feelings", "红框中的人试图掩饰自己的感受" if lang == "cn" else "They tried to hide their feelings"),
+          ("different_than_felt", "红框中的人表现出的情绪和真实感受不一致" if lang == "cn" else "They showed emotion different from what they felt"),
         ] %}
         {% for key, label in self_qs %}
           <div class="q slider-q">
@@ -38,31 +39,31 @@
                    name="self_overall_{{ key }}" class="rating-slider"
                    data-value-id="val_self_overall_{{ key }}" data-touch-id="touch_self_overall_{{ key }}" required>
             <input type="hidden" id="touch_self_overall_{{ key }}" name="touch_self_overall_{{ key }}" value="0">
-            <div class="hint">1 = Not at all, 7 = Extremely</div>
+            <div class="hint">{{ "1 = 完全没有，7 = 非常强烈" if lang == "cn" else "1 = Not at all, 7 = Extremely" }}</div>
           </div>
         {% endfor %}
       </div>
 
       <label for="felt_primary_overall">
-        <strong>What was the primary emotion(s) the highlighted person likely FELT during the entire dialogue?</strong>
+        <strong>{{ "整个对话中，红框中的人内心最可能感受到哪些主要情绪？" if lang == "cn" else "What was the primary emotion(s) the highlighted person likely FELT during the entire dialogue?" }}</strong>
       </label>
       <textarea id="felt_primary_overall" name="felt_primary_overall" rows="3"
                 required></textarea>
 
 
-      <h2>Origin guess</h2>
-      <label>Best guess: which country is this person from?</label>
-      <select name="origin_region" id="origin_region" required>
-        <option value="" selected disabled>Choose...</option>
+      <h2>{{ "来源地猜测" if lang == "cn" else "Origin guess" }}</h2>
+      <label>{{ "请尽量猜测：这个人来自哪个国家？" if lang == "cn" else "Best guess: which country is this person from?" }}</label>
+      <select name="origin_region" id="origin_region" data-i18n-kind="country" required>
+        <option value="" selected disabled>{{ "请选择..." if lang == "cn" else "Choose..." }}</option>
         {% for r in regions %}
           <option value="{{ r }}">{{ r }}</option>
         {% endfor %}
       </select>
 
       <div id="originStateWrap" style="display:none;">
-        <label>If United States, which state?</label>
-        <select name="origin_state" id="origin_state">
-          <option value="" selected disabled>Choose...</option>
+        <label>{{ "如果是美国，来自哪个州？" if lang == "cn" else "If United States, which state?" }}</label>
+        <select name="origin_state" id="origin_state" data-i18n-kind="us_state">
+          <option value="" selected disabled>{{ "请选择..." if lang == "cn" else "Choose..." }}</option>
           {% for s in us_states %}
             <option value="{{ s }}">{{ s }}</option>
           {% endfor %}
@@ -70,30 +71,30 @@
       </div>
 
       <div id="originProvinceWrap" style="display:none;">
-        <label>If China, which province?</label>
-        <select name="origin_province" id="origin_province">
-          <option value="" selected disabled>Choose...</option>
+        <label>{{ "如果是中国，来自哪个省份？" if lang == "cn" else "If China, which province?" }}</label>
+        <select name="origin_province" id="origin_province" data-i18n-kind="cn_province">
+          <option value="" selected disabled>{{ "请选择..." if lang == "cn" else "Choose..." }}</option>
           {% for p in china_provinces %}
             <option value="{{ p }}">{{ p }}</option>
           {% endfor %}
         </select>
       </div>
 
-      <h2>SVI (single items)</h2>
+      <h2>{{ "SVI（单项）" if lang == "cn" else "SVI (single items)" }}</h2>
       {% for key, label in svi_facets %}
         <div class="q slider-q">
           <label for="{{ key }}">{{ label }}: <span id="val_{{ key }}">4</span></label>
           <input id="{{ key }}" type="range" min="1" max="7" step="1" value="4"
                  name="{{ key }}" class="rating-slider" data-value-id="val_{{ key }}" data-touch-id="touch_{{ key }}" required>
           <input type="hidden" id="touch_{{ key }}" name="touch_{{ key }}" value="0">
-          <div class="hint">1 = Not at all satisfied, 7 = Extremely satisfied</div>
+          <div class="hint">{{ "1 = 完全不满意，7 = 非常满意" if lang == "cn" else "1 = Not at all satisfied, 7 = Extremely satisfied" }}</div>
         </div>
       {% endfor %}
 
-      <h2>Scenario engagement</h2>
-      {% for key, label, hint in post_scenario_facets %}
+      <h2>{{ "情境投入" if lang == "cn" else "Scenario engagement" }}</h2>
+      {% for key, title, label, hint in post_scenario_facets %}
         <div class="q slider-q">
-          <label for="{{ key }}">{{ label }}: <span id="val_{{ key }}">3</span></label>
+          <label for="{{ key }}"><strong>{{ title }}</strong><br>{{ label }}: <span id="val_{{ key }}">3</span></label>
           <input id="{{ key }}" type="range" min="1" max="5" step="1" value="3"
                  name="{{ key }}" class="rating-slider" data-value-id="val_{{ key }}" data-touch-id="touch_{{ key }}" required>
           <input type="hidden" id="touch_{{ key }}" name="touch_{{ key }}" value="0">
@@ -101,7 +102,7 @@
         </div>
       {% endfor %}
 
-      <button class="btn" type="submit">Finish & Get Code</button>
+      <button class="btn" type="submit">{{ "完成并获取代码" if lang == "cn" else "Finish & Get Code" }}</button>
     </form>
   </div>
 
@@ -131,11 +132,12 @@
     form.addEventListener('submit', (ev) => {
       if (!allMoved()) {
         ev.preventDefault();
-        alert('Please interact with every slider at least once before submitting.');
+        alert('{{ "提交前，请至少拖动每个滑块一次。" if lang == "cn" else "Please interact with every slider at least once before submitting." }}');
       }
     });
 
     (function(){
+      const lang = "{{ lang }}";
       const countrySel = document.getElementById('origin_region');
       const stateWrap = document.getElementById('originStateWrap');
       const provWrap = document.getElementById('originProvinceWrap');
@@ -161,6 +163,39 @@
       if (countrySel) {
         countrySel.addEventListener('change', syncOrigin);
         syncOrigin();
+      }
+
+      if (lang === "cn") {
+        const usStateMap = {
+          "Alabama":"阿拉巴马州","Alaska":"阿拉斯加州","Arizona":"亚利桑那州","Arkansas":"阿肯色州","California":"加利福尼亚州","Colorado":"科罗拉多州","Connecticut":"康涅狄格州","Delaware":"特拉华州",
+          "Florida":"佛罗里达州","Georgia":"佐治亚州","Hawaii":"夏威夷州","Idaho":"爱达荷州","Illinois":"伊利诺伊州","Indiana":"印第安纳州","Iowa":"艾奥瓦州","Kansas":"堪萨斯州","Kentucky":"肯塔基州",
+          "Louisiana":"路易斯安那州","Maine":"缅因州","Maryland":"马里兰州","Massachusetts":"马萨诸塞州","Michigan":"密歇根州","Minnesota":"明尼苏达州","Mississippi":"密西西比州","Missouri":"密苏里州",
+          "Montana":"蒙大拿州","Nebraska":"内布拉斯加州","Nevada":"内华达州","New Hampshire":"新罕布什尔州","New Jersey":"新泽西州","New Mexico":"新墨西哥州","New York":"纽约州",
+          "North Carolina":"北卡罗来纳州","North Dakota":"北达科他州","Ohio":"俄亥俄州","Oklahoma":"俄克拉荷马州","Oregon":"俄勒冈州","Pennsylvania":"宾夕法尼亚州","Rhode Island":"罗得岛州",
+          "South Carolina":"南卡罗来纳州","South Dakota":"南达科他州","Tennessee":"田纳西州","Texas":"得克萨斯州","Utah":"犹他州","Vermont":"佛蒙特州","Virginia":"弗吉尼亚州","Washington":"华盛顿州",
+          "West Virginia":"西弗吉尼亚州","Wisconsin":"威斯康星州","Wyoming":"怀俄明州","District of Columbia":"哥伦比亚特区","Not in the United States":"不在美国境内"
+        };
+        const cnProvinceMap = {"Anhui":"安徽","Beijing":"北京","Chongqing":"重庆","Fujian":"福建","Gansu":"甘肃","Guangdong":"广东","Guangxi":"广西","Guizhou":"贵州","Hainan":"海南","Hebei":"河北","Heilongjiang":"黑龙江","Henan":"河南","Hong Kong":"香港","Hubei":"湖北","Hunan":"湖南","Inner Mongolia":"内蒙古","Jiangsu":"江苏","Jiangxi":"江西","Jilin":"吉林","Liaoning":"辽宁","Macau":"澳门","Ningxia":"宁夏","Qinghai":"青海","Shaanxi":"陕西","Shandong":"山东","Shanghai":"上海","Shanxi":"山西","Sichuan":"四川","Tianjin":"天津","Tibet":"西藏","Xinjiang":"新疆","Yunnan":"云南","Zhejiang":"浙江"};
+        const countryNameToCode = {
+          "Afghanistan":"AF","Albania":"AL","Algeria":"DZ","Andorra":"AD","Angola":"AO","Antigua and Barbuda":"AG","Argentina":"AR","Armenia":"AM","Australia":"AU","Austria":"AT","Azerbaijan":"AZ","Bahamas":"BS","Bahrain":"BH","Bangladesh":"BD","Barbados":"BB","Belarus":"BY","Belgium":"BE","Belize":"BZ","Benin":"BJ","Bhutan":"BT","Bolivia":"BO","Bosnia and Herzegovina":"BA","Botswana":"BW","Brazil":"BR","Brunei":"BN","Bulgaria":"BG","Burkina Faso":"BF","Burundi":"BI","Cabo Verde":"CV","Cambodia":"KH","Cameroon":"CM","Canada":"CA","Central African Republic":"CF","Chad":"TD","Chile":"CL","China":"CN","Colombia":"CO","Comoros":"KM","Congo":"CG","Costa Rica":"CR","Cote d'Ivoire":"CI","Croatia":"HR","Cuba":"CU","Cyprus":"CY","Czechia":"CZ","Democratic Republic of the Congo":"CD","Denmark":"DK","Djibouti":"DJ","Dominica":"DM","Dominican Republic":"DO","Ecuador":"EC","Egypt":"EG","El Salvador":"SV","Equatorial Guinea":"GQ","Eritrea":"ER","Estonia":"EE","Eswatini":"SZ","Ethiopia":"ET","Fiji":"FJ","Finland":"FI","France":"FR","Gabon":"GA","Gambia":"GM","Georgia":"GE","Germany":"DE","Ghana":"GH","Greece":"GR","Grenada":"GD","Guatemala":"GT","Guinea":"GN","Guinea-Bissau":"GW","Guyana":"GY","Haiti":"HT","Honduras":"HN","Hungary":"HU","Iceland":"IS","India":"IN","Indonesia":"ID","Iran":"IR","Iraq":"IQ","Ireland":"IE","Israel":"IL","Italy":"IT","Jamaica":"JM","Japan":"JP","Jordan":"JO","Kazakhstan":"KZ","Kenya":"KE","Kiribati":"KI","Kuwait":"KW","Kyrgyzstan":"KG","Laos":"LA","Latvia":"LV","Lebanon":"LB","Lesotho":"LS","Liberia":"LR","Libya":"LY","Liechtenstein":"LI","Lithuania":"LT","Luxembourg":"LU","Madagascar":"MG","Malawi":"MW","Malaysia":"MY","Maldives":"MV","Mali":"ML","Malta":"MT","Marshall Islands":"MH","Mauritania":"MR","Mauritius":"MU","Mexico":"MX","Micronesia":"FM","Moldova":"MD","Monaco":"MC","Mongolia":"MN","Montenegro":"ME","Morocco":"MA","Mozambique":"MZ","Myanmar":"MM","Namibia":"NA","Nauru":"NR","Nepal":"NP","Netherlands":"NL","New Zealand":"NZ","Nicaragua":"NI","Niger":"NE","Nigeria":"NG","North Korea":"KP","North Macedonia":"MK","Norway":"NO","Oman":"OM","Pakistan":"PK","Palau":"PW","Panama":"PA","Papua New Guinea":"PG","Paraguay":"PY","Peru":"PE","Philippines":"PH","Poland":"PL","Portugal":"PT","Qatar":"QA","Romania":"RO","Russia":"RU","Rwanda":"RW","Saint Kitts and Nevis":"KN","Saint Lucia":"LC","Saint Vincent and the Grenadines":"VC","Samoa":"WS","San Marino":"SM","Sao Tome and Principe":"ST","Saudi Arabia":"SA","Senegal":"SN","Serbia":"RS","Seychelles":"SC","Sierra Leone":"SL","Singapore":"SG","Slovakia":"SK","Slovenia":"SI","Solomon Islands":"SB","Somalia":"SO","South Africa":"ZA","South Korea":"KR","South Sudan":"SS","Spain":"ES","Sri Lanka":"LK","Sudan":"SD","Suriname":"SR","Sweden":"SE","Switzerland":"CH","Syria":"SY","Tajikistan":"TJ","Tanzania":"TZ","Thailand":"TH","Timor-Leste":"TL","Togo":"TG","Tonga":"TO","Trinidad and Tobago":"TT","Tunisia":"TN","Turkey":"TR","Turkmenistan":"TM","Tuvalu":"TV","Uganda":"UG","Ukraine":"UA","United Arab Emirates":"AE","United Kingdom":"GB","United States":"US","Uruguay":"UY","Uzbekistan":"UZ","Vanuatu":"VU","Vatican City":"VA","Venezuela":"VE","Vietnam":"VN","Yemen":"YE","Zambia":"ZM","Zimbabwe":"ZW"
+        };
+        const dn = (typeof Intl !== "undefined" && Intl.DisplayNames) ? new Intl.DisplayNames(["zh-Hans"], {type: "region"}) : null;
+        const countryOverrides = {"United States":"美国","China":"中国","Prefer not to say":"不愿透露"};
+        document.querySelectorAll("select[data-i18n-kind]").forEach((sel) => {
+          const kind = sel.dataset.i18nKind;
+          Array.from(sel.options).forEach((opt) => {
+            if (!opt.value) return;
+            if (kind === "us_state" && usStateMap[opt.value]) opt.textContent = usStateMap[opt.value];
+            if (kind === "cn_province" && cnProvinceMap[opt.value]) opt.textContent = cnProvinceMap[opt.value];
+            if (kind === "country") {
+              if (countryOverrides[opt.value]) opt.textContent = countryOverrides[opt.value];
+              else if (dn) {
+                const code = countryNameToCode[opt.value];
+                if (code) opt.textContent = dn.of(code) || opt.textContent;
+              }
+            }
+          });
+        });
       }
     })();
   </script>

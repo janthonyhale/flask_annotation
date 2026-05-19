@@ -2,32 +2,33 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Demographics</title>
+  <title>{{ "背景问题" if lang == "cn" else "Demographics" }}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
 </head>
 <body>
   <div class="container">
-    <h1>Background Questions</h1>
+    <h1>{{ "背景问题" if lang == "cn" else "Background Questions" }}</h1>
 
     {% if error %}
       <div class="error">{{ error }}</div>
     {% endif %}
 
     <form method="post">
-      <label>Age</label>
+      <input type="hidden" name="lang" value="{{ lang }}">
+      <label>{{ "年龄" if lang == "cn" else "Age" }}</label>
       <input name="age" type="number" min="18" max="120" step="1" required>
 
-      <label>Gender</label>
+      <label>{{ "性别" if lang == "cn" else "Gender" }}</label>
       <select name="gender" required>
-        <option value="" selected disabled>Choose...</option>
+        <option value="" selected disabled>{{ "请选择..." if lang == "cn" else "Choose..." }}</option>
         {% for g in genders %}
           <option value="{{ g }}">{{ g }}</option>
         {% endfor %}
       </select>
 
-      <label>Country you grew up in</label>
-      <select name="grew_up_region" required>
-        <option value="" selected disabled>Choose...</option>
+      <label>{{ "你成长的国家" if lang == "cn" else "Country you grew up in" }}</label>
+      <select name="grew_up_region" id="grew_up_region" data-i18n-kind="country" required>
+        <option value="" selected disabled>{{ "请选择..." if lang == "cn" else "Choose..." }}</option>
         {% for r in regions %}
           <option value="{{ r }}">{{ r }}</option>
         {% endfor %}
@@ -35,9 +36,9 @@
 
 
       <div id="usStateWrap" style="display:none;">
-        <label>If United States, which state?</label>
-        <select name="grew_up_state" id="grew_up_state">
-          <option value="" selected disabled>Choose...</option>
+        <label>{{ "如果是美国，来自哪个州？" if lang == "cn" else "If United States, which state?" }}</label>
+        <select name="grew_up_state" id="grew_up_state" data-i18n-kind="us_state">
+          <option value="" selected disabled>{{ "请选择..." if lang == "cn" else "Choose..." }}</option>
           {% for s in us_states %}
             <option value="{{ s }}">{{ s }}</option>
           {% endfor %}
@@ -45,9 +46,9 @@
       </div>
 
       <div id="chinaProvWrap" style="display:none;">
-        <label>If China, which province?</label>
-        <select name="grew_up_province" id="grew_up_province">
-          <option value="" selected disabled>Choose...</option>
+        <label>{{ "如果是中国，来自哪个省份？" if lang == "cn" else "If China, which province?" }}</label>
+        <select name="grew_up_province" id="grew_up_province" data-i18n-kind="cn_province">
+          <option value="" selected disabled>{{ "请选择..." if lang == "cn" else "Choose..." }}</option>
           {% for p in china_provinces %}
             <option value="{{ p }}">{{ p }}</option>
           {% endfor %}
@@ -55,15 +56,16 @@
       </div>
 
 
-      <label>Native language</label>
+      <label>{{ "母语" if lang == "cn" else "Native language" }}</label>
       <input name="native_language" required>
 
-      <button class="btn" type="submit">Continue</button>
+      <button class="btn" type="submit">{{ "继续" if lang == "cn" else "Continue" }}</button>
     </form>
   </div>
 
   <script>
     (function(){
+      const lang = "{{ lang }}";
       const regionSel = document.querySelector('select[name="grew_up_region"]');
       const usWrap = document.getElementById('usStateWrap');
       const cnWrap = document.getElementById('chinaProvWrap');
@@ -88,6 +90,37 @@
       regionSel.addEventListener('change', sync);
       // Initialize on load (in case browser restores form state)
       sync();
+
+      if (lang === "cn") {
+        const usStateMap = {
+          "Alabama":"阿拉巴马州","Alaska":"阿拉斯加州","Arizona":"亚利桑那州","Arkansas":"阿肯色州","California":"加利福尼亚州","Colorado":"科罗拉多州","Connecticut":"康涅狄格州","Delaware":"特拉华州",
+          "Florida":"佛罗里达州","Georgia":"佐治亚州","Hawaii":"夏威夷州","Idaho":"爱达荷州","Illinois":"伊利诺伊州","Indiana":"印第安纳州","Iowa":"艾奥瓦州","Kansas":"堪萨斯州","Kentucky":"肯塔基州",
+          "Louisiana":"路易斯安那州","Maine":"缅因州","Maryland":"马里兰州","Massachusetts":"马萨诸塞州","Michigan":"密歇根州","Minnesota":"明尼苏达州","Mississippi":"密西西比州","Missouri":"密苏里州",
+          "Montana":"蒙大拿州","Nebraska":"内布拉斯加州","Nevada":"内华达州","New Hampshire":"新罕布什尔州","New Jersey":"新泽西州","New Mexico":"新墨西哥州","New York":"纽约州",
+          "North Carolina":"北卡罗来纳州","North Dakota":"北达科他州","Ohio":"俄亥俄州","Oklahoma":"俄克拉荷马州","Oregon":"俄勒冈州","Pennsylvania":"宾夕法尼亚州","Rhode Island":"罗得岛州",
+          "South Carolina":"南卡罗来纳州","South Dakota":"南达科他州","Tennessee":"田纳西州","Texas":"得克萨斯州","Utah":"犹他州","Vermont":"佛蒙特州","Virginia":"弗吉尼亚州","Washington":"华盛顿州",
+          "West Virginia":"西弗吉尼亚州","Wisconsin":"威斯康星州","Wyoming":"怀俄明州","District of Columbia":"哥伦比亚特区","Not in the United States":"不在美国境内"
+        };
+        const cnProvinceMap = {"Anhui":"安徽","Beijing":"北京","Chongqing":"重庆","Fujian":"福建","Gansu":"甘肃","Guangdong":"广东","Guangxi":"广西","Guizhou":"贵州","Hainan":"海南","Hebei":"河北","Heilongjiang":"黑龙江","Henan":"河南","Hong Kong":"香港","Hubei":"湖北","Hunan":"湖南","Inner Mongolia":"内蒙古","Jiangsu":"江苏","Jiangxi":"江西","Jilin":"吉林","Liaoning":"辽宁","Macau":"澳门","Ningxia":"宁夏","Qinghai":"青海","Shaanxi":"陕西","Shandong":"山东","Shanghai":"上海","Shanxi":"山西","Sichuan":"四川","Tianjin":"天津","Tibet":"西藏","Xinjiang":"新疆","Yunnan":"云南","Zhejiang":"浙江"};
+        const dn = (typeof Intl !== "undefined" && Intl.DisplayNames) ? new Intl.DisplayNames(["zh-Hans"], {type: "region"}) : null;
+        const countryOverrides = {"United States":"美国","China":"中国","Prefer not to say":"不愿透露"};
+
+        document.querySelectorAll("select[data-i18n-kind]").forEach((sel) => {
+          const kind = sel.dataset.i18nKind;
+          Array.from(sel.options).forEach((opt) => {
+            if (!opt.value) return;
+            if (kind === "us_state" && usStateMap[opt.value]) opt.textContent = usStateMap[opt.value];
+            if (kind === "cn_province" && cnProvinceMap[opt.value]) opt.textContent = cnProvinceMap[opt.value];
+            if (kind === "country") {
+              if (countryOverrides[opt.value]) opt.textContent = countryOverrides[opt.value];
+              else if (dn) {
+                const code = (opt.value === "South Korea") ? "KR" : (opt.value === "North Korea" ? "KP" : null);
+                if (code) opt.textContent = dn.of(code) || opt.textContent;
+              }
+            }
+          });
+        });
+      }
     })();
   </script>
 

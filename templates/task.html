@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Segment {{ segment_idx + 1 }}</title>
+  <title>{{ "片段" if lang == "cn" else "Segment" }} {{ segment_idx + 1 }}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
 
   <style>
@@ -60,11 +60,10 @@
 </head>
 <body>
   <div class="container widest">
-    <h1>Segment <span class="js-current-seg">{{ segment_idx + 1 }}</span>/<span class="js-total-seg">?</span></h1>
+    <h1>{{ "片段" if lang == "cn" else "Segment" }} <span class="js-current-seg">{{ segment_idx + 1 }}</span>/<span class="js-total-seg">?</span></h1>
 
     <div class="instructions">
-      <strong>Important:</strong> You will see both people. <u>Only rate emotions for the person inside the red box</u>.
-      Do not skip around in the video; watch the segment in order.
+      <strong>{{ "要点：" if lang == "cn" else "Important:" }}</strong> {{ "你会看到两个人。请只评定红框内人物的情绪。不要跳看视频，请按顺序观看本片段。" if lang == "cn" else "You will see both people. Only rate emotions for the person inside the red box. Do not skip around in the video; watch the segment in order." }}
     </div>
 
     {% if error %}
@@ -76,47 +75,47 @@
         <div class="video-wrap" style="position:relative;">
           <video id="vid" preload="metadata" playsinline>
             <source src="{{ video_path }}" type="{{ video_mime }}">
-            Your browser does not support the video tag.
+            {{ "你的浏览器不支持 video 标签。" if lang == "cn" else "Your browser does not support the video tag." }}
           </video>
 
           <div id="highlight" class="highlight {{ target_side }}"></div>
 
           <div id="pauseOverlay" class="pause-overlay" style="display:none; position:absolute; inset:0; background: rgba(0,0,0,0.45); color:#fff; align-items:center; justify-content:center; text-align:center; padding:18px; font-size:16px; font-weight:600;">
-            Segment complete. Please answer the questions on the right to continue.
+            {{ "该片段已完成。请先回答右侧问题再继续。" if lang == "cn" else "Segment complete. Please answer the questions on the right to continue." }}
           </div>
 
         </div>
 
 
         <div class="custom-controls" style="margin-top: 10px; display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
-          <button type="button" id="playBtn" class="btn" style="padding:10px 14px;">Play</button>
+          <button type="button" id="playBtn" class="btn" style="padding:10px 14px;">{{ "播放" if lang == "cn" else "Play" }}</button>
           <div class="meta-left" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-            <span class="meta-chip">Seg <strong class="js-current-seg">{{ segment_idx + 1 }}</strong>/<strong class="js-total-seg">?</strong></span>
-            <span class="meta-chip">1 min each</span>
-            <span class="meta-chip">Time left: <strong><span class="js-time-left">--:--</span></strong></span>
+            <span class="meta-chip">{{ "片段" if lang == "cn" else "Seg" }} <strong class="js-current-seg">{{ segment_idx + 1 }}</strong>/<strong class="js-total-seg">?</strong></span>
+            <span class="meta-chip">{{ "每段 1 分钟" if lang == "cn" else "1 min each" }}</span>
+            <span class="meta-chip">{{ "剩余时间：" if lang == "cn" else "Time left:" }} <strong><span class="js-time-left">--:--</span></strong></span>
           </div>
         </div>
 
 
         <div class="segment-status" id="segmentStatus">
-          This segment will pause automatically at <span id="endTimeLabel"></span>.
+          {{ "该片段会在" if lang == "cn" else "This segment will pause automatically at" }} <span id="endTimeLabel"></span>{{ " 自动暂停。" if lang == "cn" else "." }}
         </div>
       </div>
 
       <div class="task-form-col">
         <form id="segmentForm" method="post" action="{{ url_for('submit_segment') }}">
           <input type="hidden" name="segment_idx" value="{{ segment_idx }}">
-          <h2>Indicate what emotion the <strong>highlighted person</strong> expressed in this 1-minute segment</h2>
+          <h2>{{ "请判断红框中的人在这 1 分钟内表现出的情绪" if lang == "cn" else "Indicate what emotion the highlighted person expressed in this 1-minute segment" }}</h2>
 
           <div class="slider-grid">
             {% set expressed_qs = [
-              ("anger", "The highlighted person showed anger at their partner"),
-              ("compassion", "The highlighted person showed compassion for their partner"),
-              ("joy", "The highlighted person showed joy"),
-              ("fear_anxiety", "The highlighted person showed fear/anxiety"),
-              ("sadness", "The highlighted person showed sadness"),
-              ("hide_feelings", "The highlighted person tried to hide their feelings"),
-              ("different_than_felt", "The highlighted person showed emotion different than they felt"),
+              ("anger", "红框中的人对对方表现出愤怒" if lang == "cn" else "The highlighted person showed anger at their partner"),
+              ("compassion", "红框中的人对对方表现出同情或关心" if lang == "cn" else "The highlighted person showed compassion for their partner"),
+              ("joy", "红框中的人表现出快乐" if lang == "cn" else "The highlighted person showed joy"),
+              ("fear_anxiety", "红框中的人表现出害怕或焦虑" if lang == "cn" else "The highlighted person showed fear/anxiety"),
+              ("sadness", "红框中的人表现出难过" if lang == "cn" else "The highlighted person showed sadness"),
+              ("hide_feelings", "红框中的人试图掩饰自己的感受" if lang == "cn" else "The highlighted person tried to hide their feelings"),
+              ("different_than_felt", "红框中的人表现出的情绪和真实感受不一致" if lang == "cn" else "The highlighted person showed emotion different than they felt"),
             ] %}
             {% for key, label in expressed_qs %}
               <div class="q slider-q">
@@ -125,17 +124,17 @@
                        name="exp_{{ key }}" class="rating-slider"
                        data-value-id="val_exp_{{ key }}" data-touch-id="touch_exp_{{ key }}">
                 <input type="hidden" id="touch_exp_{{ key }}" name="touch_exp_{{ key }}" value="0">
-                <div class="hint">1 = Not at all, 7 = Extremely</div>
+                <div class="hint">{{ "1 = 完全没有，7 = 非常强烈" if lang == "cn" else "1 = Not at all, 7 = Extremely" }}</div>
               </div>
             {% endfor %}
           </div>
 
-          <label for="felt_primary"><strong>What was the primary emotion(s) the highlighted person likely FELT during this segment?</strong></label>
+          <label for="felt_primary"><strong>{{ "这个片段中，红框中的人内心最可能感受到哪些主要情绪？" if lang == "cn" else "What was the primary emotion(s) the highlighted person likely FELT during this segment?" }}</strong></label>
           <textarea id="felt_primary" name="felt_primary" rows="2"></textarea>
 
 
 
-          <button id="continueBtn" class="btn" type="button" disabled>Continue to Next Segment</button>
+          <button id="continueBtn" class="btn" type="button" disabled>{{ "继续下一片段" if lang == "cn" else "Continue to Next Segment" }}</button>
 </div>
 
         </form>
@@ -145,6 +144,7 @@
 
 <script>
 (function(){
+  const lang = "{{ lang }}";
   const SEGMENT_SECONDS = {{ segment_seconds|int }};
   const segmentOverlapSeconds = {{ segment_overlap_seconds|int }};
   const segmentStrideSeconds = {{ segment_stride_seconds|int }};
@@ -258,7 +258,7 @@
   // ---- Play/Pause control ----
   function setPlayLabel(){
     if (!playBtn) return;
-    playBtn.textContent = isPlaying() ? "Pause" : "Play";
+    playBtn.textContent = isPlaying() ? (lang === "cn" ? "暂停" : "Pause") : (lang === "cn" ? "播放" : "Play");
   }
 
   async function ensureMetadata(){
@@ -309,7 +309,7 @@
       const overlapMsg = segmentIdx > 0 && segmentOverlapSeconds > 0
         ? ` This segment includes the last ${segmentOverlapSeconds} second${segmentOverlapSeconds === 1 ? "" : "s"} of the previous segment.`
         : "";
-      status.textContent = `Press Play. This segment runs from ${fmt(segmentStart)} to ${fmt(segmentEnd)} and will pause automatically at ${fmt(segmentEnd)}.` + overlapMsg;
+      status.textContent = (lang === "cn" ? `点击“播放”。本片段从 ${fmt(segmentStart)} 到 ${fmt(segmentEnd)}，播放到 ${fmt(segmentEnd)} 会自动暂停。` : `Press Play. This segment runs from ${fmt(segmentStart)} to ${fmt(segmentEnd)} and will pause automatically at ${fmt(segmentEnd)}.`) + overlapMsg;
     }
     setPlayLabel();
     updateContinue();
@@ -355,8 +355,8 @@
       vid.style.filter = "grayscale(1)";
       vid.style.opacity = "0.45";
       if (pauseOverlay) pauseOverlay.style.display = "flex";
-      if (status) status.textContent = "Segment complete. Please answer the questions on the right to continue.";
-      if (playBtn) { playBtn.disabled = true; playBtn.textContent = "Segment complete"; }
+      if (status) status.textContent = "{{ "该片段已完成。请先回答右侧问题再继续。" if lang == "cn" else "Segment complete. Please answer the questions on the right to continue." }}";
+      if (playBtn) { playBtn.disabled = true; playBtn.textContent = (lang === "cn" ? "片段完成" : "Segment complete"); }
 
       setTimeLeft(0);
       updateContinue();

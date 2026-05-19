@@ -2,16 +2,16 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Final Questions</title>
+  <title>{{ "最后的问题（整个对话）" if lang == "cn" else "Final Questions" }}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
 </head>
 <body>
   <div class="container">
-    <h1>Final Questions (Entire Dialogue)</h1>
+    <h1>{{ "最后的问题（整个对话）" if lang == "cn" else "Final Questions (Entire Dialogue)" }}</h1>
 
     <div class="instructions">
-      <strong>Reminder:</strong> Rate only the person you were assigned to (the highlighted {{ target_side }} side).
-      Move every slider at least once before submitting.
+      <strong>{{ "提醒：" if lang == "cn" else "Reminder:" }}</strong> {{ "只评定指定人物（红框中的一侧）。" if lang == "cn" else "Rate only the person you were assigned to (the highlighted " ~ target_side ~ " side)." }}
+      {{ "提交前，每个滑块都请至少拖动一次。" if lang == "cn" else "Move every slider at least once before submitting." }}
     </div>
 
     {% if error %}
@@ -19,7 +19,7 @@
     {% endif %}
 
     <form method="post" id="postForm">
-      <h2>Indicate what emotion the highlighted person expressed during the entire dialogue</h2>
+      <h2>{{ "请判断红框中的人在整个对话中表现出的情绪。" if lang == "cn" else "Indicate what emotion the highlighted person expressed during the entire dialogue." }}</h2>
 
       <div class="slider-grid">
         {% set self_qs = [
@@ -50,19 +50,19 @@
                 required></textarea>
 
 
-      <h2>Origin guess</h2>
-      <label>Best guess: which country is this person from?</label>
+      <h2>{{ "来源地猜测" if lang == "cn" else "Origin guess" }}</h2>
+      <label>{{ "请尽量猜测：这个人来自哪个国家？" if lang == "cn" else "Best guess: which country is this person from?" }}</label>
       <select name="origin_region" id="origin_region" required>
-        <option value="" selected disabled>Choose...</option>
+        <option value="" selected disabled>{{ "请选择..." if lang == "cn" else "Choose..." }}</option>
         {% for r in regions %}
           <option value="{{ r }}">{{ r }}</option>
         {% endfor %}
       </select>
 
       <div id="originStateWrap" style="display:none;">
-        <label>If United States, which state?</label>
+        <label>{{ "如果是美国，来自哪个州？" if lang == "cn" else "If United States, which state?" }}</label>
         <select name="origin_state" id="origin_state">
-          <option value="" selected disabled>Choose...</option>
+          <option value="" selected disabled>{{ "请选择..." if lang == "cn" else "Choose..." }}</option>
           {% for s in us_states %}
             <option value="{{ s }}">{{ s }}</option>
           {% endfor %}
@@ -70,9 +70,9 @@
       </div>
 
       <div id="originProvinceWrap" style="display:none;">
-        <label>If China, which province?</label>
+        <label>{{ "如果是中国，来自哪个省份？" if lang == "cn" else "If China, which province?" }}</label>
         <select name="origin_province" id="origin_province">
-          <option value="" selected disabled>Choose...</option>
+          <option value="" selected disabled>{{ "请选择..." if lang == "cn" else "Choose..." }}</option>
           {% for p in china_provinces %}
             <option value="{{ p }}">{{ p }}</option>
           {% endfor %}
@@ -86,14 +86,14 @@
           <input id="{{ key }}" type="range" min="1" max="7" step="1" value="4"
                  name="{{ key }}" class="rating-slider" data-value-id="val_{{ key }}" data-touch-id="touch_{{ key }}" required>
           <input type="hidden" id="touch_{{ key }}" name="touch_{{ key }}" value="0">
-          <div class="hint">1 = Not at all satisfied, 7 = Extremely satisfied</div>
+          <div class="hint">{{ "1 = 完全不满意，7 = 非常满意" if lang == "cn" else "1 = Not at all satisfied, 7 = Extremely satisfied" }}</div>
         </div>
       {% endfor %}
 
       <h2>Scenario engagement</h2>
-      {% for key, label, hint in post_scenario_facets %}
+      {% for key, title, label, hint in post_scenario_facets %}
         <div class="q slider-q">
-          <label for="{{ key }}">{{ label }}: <span id="val_{{ key }}">3</span></label>
+          <label for="{{ key }}"><strong>{{ title }}</strong><br>{{ label }}: <span id="val_{{ key }}">3</span></label>
           <input id="{{ key }}" type="range" min="1" max="5" step="1" value="3"
                  name="{{ key }}" class="rating-slider" data-value-id="val_{{ key }}" data-touch-id="touch_{{ key }}" required>
           <input type="hidden" id="touch_{{ key }}" name="touch_{{ key }}" value="0">
@@ -101,7 +101,7 @@
         </div>
       {% endfor %}
 
-      <button class="btn" type="submit">Finish & Get Code</button>
+      <button class="btn" type="submit">{{ "完成并获取代码" if lang == "cn" else "Finish & Get Code" }}</button>
     </form>
   </div>
 
@@ -131,7 +131,7 @@
     form.addEventListener('submit', (ev) => {
       if (!allMoved()) {
         ev.preventDefault();
-        alert('Please interact with every slider at least once before submitting.');
+        alert('{{ "提交前，请至少拖动每个滑块一次。" if lang == "cn" else "Please interact with every slider at least once before submitting." }}');
       }
     });
 

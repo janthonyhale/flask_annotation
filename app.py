@@ -5,7 +5,6 @@ import random
 import sqlite3
 import hashlib
 from datetime import datetime
-from urllib.parse import urlparse, parse_qs, unquote, quote
 from urllib.parse import urlparse, parse_qs, unquote
 
 import boto3
@@ -28,11 +27,13 @@ if SEGMENT_STRIDE_SECONDS <= 0:
 # Entry formats:
 #   - Full URL: https://...
 #   - S3 object key or filename: folder/my_video.mp4
-#   - Explicit ID + source: my_video,https://...
+#   - S3 URI: s3://bucket-name/folder/my_video.mp4
+#   - Explicit ID + source: my_video,https://... or my_video,s3://bucket/key.mp4
 #
-# For non-URL entries, we build a URL using this S3 bucket.
+# For S3 entries, we generate presigned URLs at request time.
 S3_BUCKET_NAME = os.environ.get("VIDEO_S3_BUCKET", "kodis-video")
-S3_BASE_URL = f"https://{S3_BUCKET_NAME}.s3.amazonaws.com"
+S3_REGION = os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION") or "us-west-2"
+S3_PRESIGN_EXPIRES = int(os.environ.get("VIDEO_URL_EXPIRES_SEC", "7200"))
 VIDEO_LIST_PATH = os.path.join(DATA_DIR, "video_sources.txt")
 
 # Legacy local static fallback (if no configured source list exists).
@@ -88,25 +89,39 @@ def parse_video_source_line(raw_line: str, line_number: int) -> dict | None:
             video_id = left.strip()
             source = right.strip()
 
+    parsed_entry = None
+    filename_source = source
+
     if source.startswith(("http://", "https://")):
-        url = source
+        parsed_entry = {"url": source}
+    elif source.startswith("s3://"):
+        parsed = urlparse(source)
+        bucket = parsed.netloc.strip()
+        object_key = parsed.path.lstrip("/")
+        if not bucket or not object_key:
+            return None
+        parsed_entry = {"s3_bucket": bucket, "s3_key": object_key}
+        filename_source = object_key
     else:
         object_key = source.lstrip("/")
         if not object_key:
             return None
-        encoded_key = quote(object_key, safe="/")
-        url = f"{S3_BASE_URL}/{encoded_key}"
+        parsed_entry = {"s3_bucket": S3_BUCKET_NAME, "s3_key": object_key}
+        filename_source = object_key
 
     if not video_id:
-        parsed = urlparse(url)
-        filename = os.path.basename(parsed.path).strip()
+        if filename_source.startswith(("http://", "https://")):
+            filename = os.path.basename(urlparse(filename_source).path).strip()
+        else:
+            filename = os.path.basename(filename_source).strip()
         video_id = os.path.splitext(filename)[0] if filename else ""
 
     if not video_id:
         short_hash = hashlib.sha1(f"{line_number}:{line}".encode("utf-8")).hexdigest()[:8]
         video_id = f"video_{short_hash}"
 
-    return {"video_id": video_id, "url": url}
+    parsed_entry["video_id"] = video_id
+    return parsed_entry
 
 
 def load_video_pool_from_config() -> list[dict]:
@@ -150,19 +165,6 @@ SVI_FACETS = [
     ("svi_relationship", "How satisfied was the person with the relationship with the other party?"),
     ("svi_process", "How satisfied was the person with the fairness of the process?"),
     ("svi_self", "How satisfied was the person with how they represented themselves?"),
-]
-
-POST_SCENARIO_FACETS = [
-    (
-        "emotional_authenticity",
-        "To what extent did this participant appear to be genuinely experiencing the emotions they expressed, rather than simply performing what the situation seemed to call for?",
-        "1 = Clearly performing / going through the motions, 5 = Clearly experiencing real emotion throughout",
-    ),
-    (
-        "situational_absorption",
-        "How absorbed did this participant appear to be in the negotiation scenario itself — reacting to what was actually happening in the conversation rather than to the task of doing a role play?",
-        "1 = Clearly detached, 5 = Fully absorbed and driven by the unfolding situation",
-    ),
 ]
 
 REGIONS = [
@@ -549,7 +551,16 @@ def create_app():
         if n_segments is not None and segment_idx >= int(n_segments):
             return redirect(url_for("post_dialog"))
 
-        video_url = session.get("video_url")
+        segment_start_sec, segment_end_sec = get_segment_bounds(segment_idx, duration_sec)
+
+        video_url = resolve_video_source(
+            {
+                "url": session.get("video_source_url"),
+                "s3_bucket": session.get("video_s3_bucket"),
+                "s3_key": session.get("video_s3_key"),
+                "path": session.get("video_path"),
+            }
+        )
 
         return render_template(
             "task.html",
@@ -630,7 +641,16 @@ def create_app():
 
         moved_exp_ok = all(request.form.get(f"touch_exp_{k}") == "1" for k, _ in exp_items)
         if any(exp_ratings[k] == "" for k, _ in exp_items) or not moved_exp_ok or felt_primary == "":
-            video_url = session.get("video_url")
+            video_url = resolve_video_source(
+                {
+                    "url": session.get("video_source_url"),
+                    "s3_bucket": session.get("video_s3_bucket"),
+                    "s3_key": session.get("video_s3_key"),
+                    "path": session.get("video_path"),
+                }
+            )
+            duration_sec = float(session["duration_sec"]) if session.get("duration_sec") is not None else None
+            segment_start_sec, segment_end_sec = get_segment_bounds(segment_idx, duration_sec)
             return render_template(
                 "task.html",
                 video_path=video_url,
@@ -677,7 +697,6 @@ def create_app():
             us_states=US_STATES,
             china_provinces=CHINA_PROVINCES,
             svi_facets=SVI_FACETS,
-            post_scenario_facets=POST_SCENARIO_FACETS,
             target_side=session["target_side"],
         )
 
@@ -708,11 +727,6 @@ def create_app():
 
         moved_svi_ok = all(request.form.get(f"touch_{key}") == "1" for key, _ in SVI_FACETS)
 
-        post_scenario = {}
-        for key, _label, _hint in POST_SCENARIO_FACETS:
-            post_scenario[key] = request.form.get(key, "").strip()
-        moved_post_scenario_ok = all(request.form.get(f"touch_{key}") == "1" for key, _label, _hint in POST_SCENARIO_FACETS)
-
         origin_region = request.form.get("origin_region", "").strip()
         origin_state = request.form.get("origin_state", "").strip()
         origin_province = request.form.get("origin_province", "").strip()
@@ -725,7 +739,6 @@ def create_app():
                 us_states=US_STATES,
                 china_provinces=CHINA_PROVINCES,
                 svi_facets=SVI_FACETS,
-                post_scenario_facets=POST_SCENARIO_FACETS,
                 target_side=session["target_side"],
                 error="Please select a U.S. state.",
             )
@@ -738,7 +751,6 @@ def create_app():
                 us_states=US_STATES,
                 china_provinces=CHINA_PROVINCES,
                 svi_facets=SVI_FACETS,
-                post_scenario_facets=POST_SCENARIO_FACETS,
                 target_side=session["target_side"],
                 error="Please select a Chinese province.",
             )
@@ -758,8 +770,6 @@ def create_app():
             or not moved_overall_ok
             or any(svi[k] == "" for k, _ in SVI_FACETS)
             or not moved_svi_ok
-            or any(post_scenario[k] == "" for k, _label, _hint in POST_SCENARIO_FACETS)
-            or not moved_post_scenario_ok
         ):
             return render_template(
                 "post.html",
@@ -768,7 +778,6 @@ def create_app():
                 us_states=US_STATES,
                 china_provinces=CHINA_PROVINCES,
                 svi_facets=SVI_FACETS,
-                post_scenario_facets=POST_SCENARIO_FACETS,
                 target_side=session["target_side"],
                 error="Please answer all final questions and interact with every slider at least once.",
             )
@@ -778,7 +787,6 @@ def create_app():
             "felt_primary_overall": felt_primary_overall,
             "origin_guess": origin_guess,
             "svi": svi,
-            "post_scenario_facets": post_scenario,
         }
 
         completion_code = make_completion_code(session["participant_id"])

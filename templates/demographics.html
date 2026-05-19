@@ -19,7 +19,7 @@
       <input name="age" type="number" min="18" max="120" step="1" required>
 
       <label>{{ "性别" if lang == "cn" else "Gender" }}</label>
-      <select name="gender" required>
+      <select name="gender" data-i18n-kind="gender" required>
         <option value="" selected disabled>{{ "请选择..." if lang == "cn" else "Choose..." }}</option>
         {% for g in genders %}
           <option value="{{ g }}">{{ g }}</option>
@@ -102,6 +102,10 @@
           "West Virginia":"西弗吉尼亚州","Wisconsin":"威斯康星州","Wyoming":"怀俄明州","District of Columbia":"哥伦比亚特区","Not in the United States":"不在美国境内"
         };
         const cnProvinceMap = {"Anhui":"安徽","Beijing":"北京","Chongqing":"重庆","Fujian":"福建","Gansu":"甘肃","Guangdong":"广东","Guangxi":"广西","Guizhou":"贵州","Hainan":"海南","Hebei":"河北","Heilongjiang":"黑龙江","Henan":"河南","Hong Kong":"香港","Hubei":"湖北","Hunan":"湖南","Inner Mongolia":"内蒙古","Jiangsu":"江苏","Jiangxi":"江西","Jilin":"吉林","Liaoning":"辽宁","Macau":"澳门","Ningxia":"宁夏","Qinghai":"青海","Shaanxi":"陕西","Shandong":"山东","Shanghai":"上海","Shanxi":"山西","Sichuan":"四川","Tianjin":"天津","Tibet":"西藏","Xinjiang":"新疆","Yunnan":"云南","Zhejiang":"浙江"};
+        const genderMap = {"Female":"女性","Male":"男性","Non-binary":"非二元","Another identity":"其他身份","Prefer not to say":"不愿透露"};
+        const countryNameToCode = {
+          "Afghanistan":"AF","Albania":"AL","Algeria":"DZ","Andorra":"AD","Angola":"AO","Antigua and Barbuda":"AG","Argentina":"AR","Armenia":"AM","Australia":"AU","Austria":"AT","Azerbaijan":"AZ","Bahamas":"BS","Bahrain":"BH","Bangladesh":"BD","Barbados":"BB","Belarus":"BY","Belgium":"BE","Belize":"BZ","Benin":"BJ","Bhutan":"BT","Bolivia":"BO","Bosnia and Herzegovina":"BA","Botswana":"BW","Brazil":"BR","Brunei":"BN","Bulgaria":"BG","Burkina Faso":"BF","Burundi":"BI","Cabo Verde":"CV","Cambodia":"KH","Cameroon":"CM","Canada":"CA","Central African Republic":"CF","Chad":"TD","Chile":"CL","China":"CN","Colombia":"CO","Comoros":"KM","Congo":"CG","Costa Rica":"CR","Cote d'Ivoire":"CI","Croatia":"HR","Cuba":"CU","Cyprus":"CY","Czechia":"CZ","Democratic Republic of the Congo":"CD","Denmark":"DK","Djibouti":"DJ","Dominica":"DM","Dominican Republic":"DO","Ecuador":"EC","Egypt":"EG","El Salvador":"SV","Equatorial Guinea":"GQ","Eritrea":"ER","Estonia":"EE","Eswatini":"SZ","Ethiopia":"ET","Fiji":"FJ","Finland":"FI","France":"FR","Gabon":"GA","Gambia":"GM","Georgia":"GE","Germany":"DE","Ghana":"GH","Greece":"GR","Grenada":"GD","Guatemala":"GT","Guinea":"GN","Guinea-Bissau":"GW","Guyana":"GY","Haiti":"HT","Honduras":"HN","Hungary":"HU","Iceland":"IS","India":"IN","Indonesia":"ID","Iran":"IR","Iraq":"IQ","Ireland":"IE","Israel":"IL","Italy":"IT","Jamaica":"JM","Japan":"JP","Jordan":"JO","Kazakhstan":"KZ","Kenya":"KE","Kiribati":"KI","Kuwait":"KW","Kyrgyzstan":"KG","Laos":"LA","Latvia":"LV","Lebanon":"LB","Lesotho":"LS","Liberia":"LR","Libya":"LY","Liechtenstein":"LI","Lithuania":"LT","Luxembourg":"LU","Madagascar":"MG","Malawi":"MW","Malaysia":"MY","Maldives":"MV","Mali":"ML","Malta":"MT","Marshall Islands":"MH","Mauritania":"MR","Mauritius":"MU","Mexico":"MX","Micronesia":"FM","Moldova":"MD","Monaco":"MC","Mongolia":"MN","Montenegro":"ME","Morocco":"MA","Mozambique":"MZ","Myanmar":"MM","Namibia":"NA","Nauru":"NR","Nepal":"NP","Netherlands":"NL","New Zealand":"NZ","Nicaragua":"NI","Niger":"NE","Nigeria":"NG","North Korea":"KP","North Macedonia":"MK","Norway":"NO","Oman":"OM","Pakistan":"PK","Palau":"PW","Panama":"PA","Papua New Guinea":"PG","Paraguay":"PY","Peru":"PE","Philippines":"PH","Poland":"PL","Portugal":"PT","Qatar":"QA","Romania":"RO","Russia":"RU","Rwanda":"RW","Saint Kitts and Nevis":"KN","Saint Lucia":"LC","Saint Vincent and the Grenadines":"VC","Samoa":"WS","San Marino":"SM","Sao Tome and Principe":"ST","Saudi Arabia":"SA","Senegal":"SN","Serbia":"RS","Seychelles":"SC","Sierra Leone":"SL","Singapore":"SG","Slovakia":"SK","Slovenia":"SI","Solomon Islands":"SB","Somalia":"SO","South Africa":"ZA","South Korea":"KR","South Sudan":"SS","Spain":"ES","Sri Lanka":"LK","Sudan":"SD","Suriname":"SR","Sweden":"SE","Switzerland":"CH","Syria":"SY","Tajikistan":"TJ","Tanzania":"TZ","Thailand":"TH","Timor-Leste":"TL","Togo":"TG","Tonga":"TO","Trinidad and Tobago":"TT","Tunisia":"TN","Turkey":"TR","Turkmenistan":"TM","Tuvalu":"TV","Uganda":"UG","Ukraine":"UA","United Arab Emirates":"AE","United Kingdom":"GB","United States":"US","Uruguay":"UY","Uzbekistan":"UZ","Vanuatu":"VU","Vatican City":"VA","Venezuela":"VE","Vietnam":"VN","Yemen":"YE","Zambia":"ZM","Zimbabwe":"ZW"
+        };
         const dn = (typeof Intl !== "undefined" && Intl.DisplayNames) ? new Intl.DisplayNames(["zh-Hans"], {type: "region"}) : null;
         const countryOverrides = {"United States":"美国","China":"中国","Prefer not to say":"不愿透露"};
 
@@ -111,10 +115,11 @@
             if (!opt.value) return;
             if (kind === "us_state" && usStateMap[opt.value]) opt.textContent = usStateMap[opt.value];
             if (kind === "cn_province" && cnProvinceMap[opt.value]) opt.textContent = cnProvinceMap[opt.value];
+            if (kind === "gender" && genderMap[opt.value]) opt.textContent = genderMap[opt.value];
             if (kind === "country") {
               if (countryOverrides[opt.value]) opt.textContent = countryOverrides[opt.value];
               else if (dn) {
-                const code = (opt.value === "South Korea") ? "KR" : (opt.value === "North Korea" ? "KP" : null);
+                const code = countryNameToCode[opt.value];
                 if (code) opt.textContent = dn.of(code) || opt.textContent;
               }
             }

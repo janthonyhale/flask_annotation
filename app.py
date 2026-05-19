@@ -167,6 +167,19 @@ SVI_FACETS = [
     ("svi_self", "How satisfied was the person with how they represented themselves?"),
 ]
 
+POST_SCENARIO_FACETS = [
+    (
+        "emotional_authenticity",
+        "To what extent did this participant appear to be genuinely experiencing the emotions they expressed, rather than simply performing what the situation seemed to call for?",
+        "1 = Clearly performing / going through the motions, 2 = Mostly surface-level with occasional glimpses of genuine feeling, 3 = Uncertain / mixed signals, 4 = Mostly genuine with minor signs of performance, 5 = Clearly experiencing real emotion throughout",
+    ),
+    (
+        "situational_absorption",
+        "How absorbed did this participant appear to be in the negotiation scenario itself — reacting to what was actually happening in the conversation rather than to the task of doing a role play?",
+        "1 = Clearly detached (scripted or generic and not reactive), 2 = Mostly detached with occasional real reactivity, 3 = Uncertain / inconsistent, 4 = Mostly absorbed with minor breaks in immersion, 5 = Fully absorbed with spontaneous responses driven by the unfolding situation",
+    ),
+]
+
 REGIONS = [
     "Afghanistan",
     "Albania",
@@ -697,6 +710,7 @@ def create_app():
             us_states=US_STATES,
             china_provinces=CHINA_PROVINCES,
             svi_facets=SVI_FACETS,
+            post_scenario_facets=POST_SCENARIO_FACETS,
             target_side=session["target_side"],
         )
 
@@ -727,6 +741,12 @@ def create_app():
 
         moved_svi_ok = all(request.form.get(f"touch_{key}") == "1" for key, _ in SVI_FACETS)
 
+        post_scenario = {}
+        for key, _label, _hint in POST_SCENARIO_FACETS:
+            post_scenario[key] = request.form.get(key, "").strip()
+
+        moved_post_scenario_ok = all(request.form.get(f"touch_{key}") == "1" for key, _, _ in POST_SCENARIO_FACETS)
+
         origin_region = request.form.get("origin_region", "").strip()
         origin_state = request.form.get("origin_state", "").strip()
         origin_province = request.form.get("origin_province", "").strip()
@@ -739,6 +759,7 @@ def create_app():
                 us_states=US_STATES,
                 china_provinces=CHINA_PROVINCES,
                 svi_facets=SVI_FACETS,
+                post_scenario_facets=POST_SCENARIO_FACETS,
                 target_side=session["target_side"],
                 error="Please select a U.S. state.",
             )
@@ -751,6 +772,7 @@ def create_app():
                 us_states=US_STATES,
                 china_provinces=CHINA_PROVINCES,
                 svi_facets=SVI_FACETS,
+                post_scenario_facets=POST_SCENARIO_FACETS,
                 target_side=session["target_side"],
                 error="Please select a Chinese province.",
             )
@@ -770,6 +792,8 @@ def create_app():
             or not moved_overall_ok
             or any(svi[k] == "" for k, _ in SVI_FACETS)
             or not moved_svi_ok
+            or any(post_scenario[k] == "" for k, _, _ in POST_SCENARIO_FACETS)
+            or not moved_post_scenario_ok
         ):
             return render_template(
                 "post.html",
@@ -778,6 +802,7 @@ def create_app():
                 us_states=US_STATES,
                 china_provinces=CHINA_PROVINCES,
                 svi_facets=SVI_FACETS,
+                post_scenario_facets=POST_SCENARIO_FACETS,
                 target_side=session["target_side"],
                 error="Please answer all final questions and interact with every slider at least once.",
             )
@@ -787,6 +812,7 @@ def create_app():
             "felt_primary_overall": felt_primary_overall,
             "origin_guess": origin_guess,
             "svi": svi,
+            "post_scenario": post_scenario,
         }
 
         completion_code = make_completion_code(session["participant_id"])

@@ -411,6 +411,10 @@ def create_app():
         if q_lang in {"en", "cn"}:
             session["lang"] = q_lang
             return q_lang
+        form_lang = request.form.get("lang", "").strip().lower()
+        if form_lang in {"en", "cn"}:
+            session["lang"] = form_lang
+            return form_lang
         return session.get("lang", "en")
 
     os.makedirs(DATA_DIR, exist_ok=True)
@@ -482,7 +486,7 @@ def create_app():
         )
         g.db.commit()
 
-        return redirect(url_for("demographics"))
+        return redirect(url_for("demographics", lang=get_lang()))
 
     @app.get("/demographics")
     def demographics():
@@ -562,7 +566,7 @@ def create_app():
         )
         g.db.commit()
 
-        return redirect(url_for("task"))
+        return redirect(url_for("task", lang=get_lang()))
 
     @app.get("/task")
     def task():
@@ -573,7 +577,7 @@ def create_app():
         if not n_segments and duration_sec is not None:
             n_segments = compute_n_segments(duration_sec)
         if n_segments is not None and segment_idx >= int(n_segments):
-            return redirect(url_for("post_dialog"))
+            return redirect(url_for("post_dialog", lang=get_lang()))
 
         segment_start_sec, segment_end_sec = get_segment_bounds(segment_idx, duration_sec)
 
@@ -637,7 +641,7 @@ def create_app():
 
         n_segments = session.get("n_segments")
         if n_segments is not None and segment_idx >= int(n_segments):
-            return redirect(url_for("post_dialog"))
+            return redirect(url_for("post_dialog", lang=get_lang()))
 
         ratings = {}
         for e in EMOTIONS:
@@ -709,9 +713,9 @@ def create_app():
         session["segment_idx"] = next_segment_idx
 
         if n_segments is not None and next_segment_idx >= int(n_segments):
-            return redirect(url_for("post_dialog"))
+            return redirect(url_for("post_dialog", lang=get_lang()))
 
-        return redirect(url_for("task"))
+        return redirect(url_for("task", lang=get_lang()))
 
     @app.get("/post_dialog")
     def post_dialog():
@@ -840,7 +844,7 @@ def create_app():
         )
         g.db.commit()
 
-        return redirect(url_for("done"))
+        return redirect(url_for("done", lang=get_lang()))
 
     @app.get("/done")
     def done():

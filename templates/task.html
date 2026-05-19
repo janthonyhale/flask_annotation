@@ -104,6 +104,7 @@
 
       <div class="task-form-col">
         <form id="segmentForm" method="post" action="{{ url_for('submit_segment') }}">
+          <input type="hidden" name="lang" value="{{ lang }}">
           <input type="hidden" name="segment_idx" value="{{ segment_idx }}">
           <h2>{{ "请判断红框中的人在这 1 分钟内表现出的情绪" if lang == "cn" else "Indicate what emotion the highlighted person expressed in this 1-minute segment" }}</h2>
 

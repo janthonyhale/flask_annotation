@@ -19,17 +19,18 @@
     {% endif %}
 
     <form method="post" id="postForm">
+      <input type="hidden" name="lang" value="{{ lang }}">
       <h2>{{ "请判断红框中的人在整个对话中表现出的情绪。" if lang == "cn" else "Indicate what emotion the highlighted person expressed during the entire dialogue." }}</h2>
 
       <div class="slider-grid">
         {% set self_qs = [
-          ("anger", "They showed anger toward their partner"),
-          ("compassion", "They showed compassion for their partner"),
-          ("joy", "They showed joy"),
-          ("fear_anxiety", "They showed fear/anxiety"),
-          ("sadness", "They showed sadness"),
-          ("hide_feelings", "They tried to hide their feelings"),
-          ("different_than_felt", "They showed emotion different from what they felt"),
+          ("anger", "红框中的人对对方表现出愤怒" if lang == "cn" else "They showed anger toward their partner"),
+          ("compassion", "红框中的人对对方表现出同情或关心" if lang == "cn" else "They showed compassion for their partner"),
+          ("joy", "红框中的人表现出快乐" if lang == "cn" else "They showed joy"),
+          ("fear_anxiety", "红框中的人表现出害怕或焦虑" if lang == "cn" else "They showed fear/anxiety"),
+          ("sadness", "红框中的人表现出难过" if lang == "cn" else "They showed sadness"),
+          ("hide_feelings", "红框中的人试图掩饰自己的感受" if lang == "cn" else "They tried to hide their feelings"),
+          ("different_than_felt", "红框中的人表现出的情绪和真实感受不一致" if lang == "cn" else "They showed emotion different from what they felt"),
         ] %}
         {% for key, label in self_qs %}
           <div class="q slider-q">
@@ -38,13 +39,13 @@
                    name="self_overall_{{ key }}" class="rating-slider"
                    data-value-id="val_self_overall_{{ key }}" data-touch-id="touch_self_overall_{{ key }}" required>
             <input type="hidden" id="touch_self_overall_{{ key }}" name="touch_self_overall_{{ key }}" value="0">
-            <div class="hint">1 = Not at all, 7 = Extremely</div>
+            <div class="hint">{{ "1 = 完全没有，7 = 非常强烈" if lang == "cn" else "1 = Not at all, 7 = Extremely" }}</div>
           </div>
         {% endfor %}
       </div>
 
       <label for="felt_primary_overall">
-        <strong>What was the primary emotion(s) the highlighted person likely FELT during the entire dialogue?</strong>
+        <strong>{{ "整个对话中，红框中的人内心最可能感受到哪些主要情绪？" if lang == "cn" else "What was the primary emotion(s) the highlighted person likely FELT during the entire dialogue?" }}</strong>
       </label>
       <textarea id="felt_primary_overall" name="felt_primary_overall" rows="3"
                 required></textarea>
@@ -79,7 +80,7 @@
         </select>
       </div>
 
-      <h2>SVI (single items)</h2>
+      <h2>{{ "SVI（单项）" if lang == "cn" else "SVI (single items)" }}</h2>
       {% for key, label in svi_facets %}
         <div class="q slider-q">
           <label for="{{ key }}">{{ label }}: <span id="val_{{ key }}">4</span></label>
@@ -90,7 +91,7 @@
         </div>
       {% endfor %}
 
-      <h2>Scenario engagement</h2>
+      <h2>{{ "情境投入" if lang == "cn" else "Scenario engagement" }}</h2>
       {% for key, title, label, hint in post_scenario_facets %}
         <div class="q slider-q">
           <label for="{{ key }}"><strong>{{ title }}</strong><br>{{ label }}: <span id="val_{{ key }}">3</span></label>

@@ -16,12 +16,13 @@
 
     <form method="post" action="{{ url_for('start') }}">
       <input type="hidden" name="t" value="{{ t_value or '' }}">
+      <input type="hidden" name="lang" value="{{ lang }}">
 
       <label for="participant_id">{{ "唯一标识符" if lang == "cn" else "Unique ID" }}</label>
       <input id="participant_id" name="participant_id" required
-             placeholder="Enter your unique participant ID" value="{{ prefill_id or '' }}">
+             placeholder="{{ '请输入你的唯一参与者ID' if lang == 'cn' else 'Enter your unique participant ID' }}" value="{{ prefill_id or '' }}">
 
-      <button class="btn" type="submit">Start</button>
+      <button class="btn" type="submit">{{ "开始" if lang == "cn" else "Start" }}</button>
     </form>
   </div>
 </body>

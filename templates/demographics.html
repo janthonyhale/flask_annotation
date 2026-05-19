@@ -14,6 +14,7 @@
     {% endif %}
 
     <form method="post">
+      <input type="hidden" name="lang" value="{{ lang }}">
       <label>{{ "年龄" if lang == "cn" else "Age" }}</label>
       <input name="age" type="number" min="18" max="120" step="1" required>
 

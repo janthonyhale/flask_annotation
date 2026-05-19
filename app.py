@@ -160,12 +160,31 @@ EMOTIONS = [
 ]
 
 # Post-dialog SVI single-item facets (edit labels as desired)
-SVI_FACETS = [
-    ("svi_deal", "How satisfied was the person with the deal/outcome they got?"),
-    ("svi_relationship", "How satisfied was the person with the relationship with the other party?"),
-    ("svi_process", "How satisfied was the person with the fairness of the process?"),
-    ("svi_self", "How satisfied was the person with how they represented themselves?"),
-]
+SVI_FACETS = {
+    "en": [
+        ("svi_deal", "How satisfied was the person with the deal/outcome they got?"),
+        ("svi_relationship", "How satisfied was the person with the relationship with the other party?"),
+        ("svi_process", "How satisfied was the person with the fairness of the process?"),
+        ("svi_self", "How satisfied was the person with how they represented themselves?"),
+    ],
+    "cn": [
+        ("svi_deal", "这个人对最终达成的交易/结果有多满意？"),
+        ("svi_relationship", "这个人对与对方的关系有多满意？"),
+        ("svi_process", "这个人对整个过程的公平程度有多满意？"),
+        ("svi_self", "这个人对自己在对话中的表现有多满意？"),
+    ],
+}
+
+POST_SCENARIO_FACETS = {
+    "en": [
+        ("emotional_authenticity", "Question 1 — Emotional Authenticity", "To what extent did this participant appear to be genuinely experiencing the emotions they expressed, rather than simply performing what the situation seemed to call for?", "1 — Clearly performing / going through the motions 2 — Mostly surface-level, occasional glimpses of genuine feeling 3 — Uncertain / mixed signals 4 — Mostly genuine, minor signs of performance 5 — Clearly experiencing real emotion throughout"),
+        ("situational_absorption", "Question 2 — Situational Absorption", "How absorbed did this participant appear to be in the negotiation scenario itself — reacting to what was actually happening in the conversation rather than to the task of doing a role play?", "1 — Clearly detached — responses feel scripted or generic, not reactive 2 — Mostly detached, occasional moments of real reactivity 3 — Uncertain / inconsistent 4 — Mostly absorbed, minor breaks in immersion 5 — Fully absorbed — responses are spontaneous and clearly driven by the unfolding situation"),
+    ],
+    "cn": [
+        ("emotional_authenticity", "问题 1 — 情绪真实性", "这位参与者表现出的情绪有多像真情流露，而不是为了配合场景在表演？", "1 — 明显在表演/走过场 2 — 大多只是表面反应，偶尔像是真情流露 3 — 难以判断/表现不一致 4 — 大多是真情流露，略有表演痕迹 5 — 全程明显是真情流露"),
+        ("situational_absorption", "问题 2 — 情境投入度", "这位参与者看起来有多投入谈判本身，也就是在回应对话中实际发生的事，而不是只是在完成角色扮演任务？", "1 — 明显未投入情境——回答像是照稿或套话，不太像即时反应 2 — 大多未投入情境，偶尔有真实反应 3 — 难以判断/前后不一致 4 — 大多投入，偶尔脱离情境 5 — 完全投入——反应自然，明显跟着情境发展而变化"),
+    ],
+}
 
 REGIONS = [
     "Afghanistan",
@@ -395,6 +414,17 @@ def create_app():
     app = Flask(__name__)
     app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev_secret_change_me")
 
+    def get_lang() -> str:
+        q_lang = request.args.get("lang", "").strip().lower()
+        if q_lang in {"en", "cn"}:
+            session["lang"] = q_lang
+            return q_lang
+        form_lang = request.form.get("lang", "").strip().lower()
+        if form_lang in {"en", "cn"}:
+            session["lang"] = form_lang
+            return form_lang
+        return session.get("lang", "en")
+
     os.makedirs(DATA_DIR, exist_ok=True)
     init_db()
 
@@ -402,6 +432,7 @@ def create_app():
     def load_db():
         g.db = sqlite3.connect(DB_PATH)
         g.db.row_factory = sqlite3.Row
+        get_lang()
 
     @app.teardown_request
     def close_db(exc):
@@ -413,7 +444,7 @@ def create_app():
     def index():
         prefill_id = request.args.get("id", "").strip()
         t_value = request.args.get("t", "").strip()
-        return render_template("index.html", prefill_id=prefill_id, t_value=t_value)
+        return render_template("index.html", prefill_id=prefill_id, t_value=t_value, lang=get_lang())
 
     @app.post("/start")
     def start():
@@ -434,6 +465,7 @@ def create_app():
                 ),
                 prefill_id=participant_id,
                 t_value=request.form.get("t", "").strip(),
+                lang=get_lang(),
             )
 
         assignment, target_side = choose_video_assignment(g.db, participant_id, video_pool, t_minutes)
@@ -462,12 +494,12 @@ def create_app():
         )
         g.db.commit()
 
-        return redirect(url_for("demographics"))
+        return redirect(url_for("demographics", lang=get_lang()))
 
     @app.get("/demographics")
     def demographics():
         ensure_session()
-        return render_template("demographics.html", regions=REGIONS, genders=GENDERS, us_states=US_STATES, china_provinces=CHINA_PROVINCES)
+        return render_template("demographics.html", regions=REGIONS, genders=GENDERS, us_states=US_STATES, china_provinces=CHINA_PROVINCES, lang=get_lang())
 
     @app.post("/demographics")
     def demographics_post():
@@ -484,7 +516,8 @@ def create_app():
                 genders=GENDERS,
                 us_states=US_STATES,
                 china_provinces=CHINA_PROVINCES,
-                error="Please enter age as a number.",
+                lang=get_lang(),
+                error=("请输入数字年龄。" if get_lang() == "cn" else "Please enter age as a number."),
             )
 
         if age < 18 or age > 120:
@@ -494,7 +527,8 @@ def create_app():
                 genders=GENDERS,
                 us_states=US_STATES,
                 china_provinces=CHINA_PROVINCES,
-                error="Please enter an age between 18 and 120.",
+                lang=get_lang(),
+                error=("请输入 18 到 120 之间的年龄。" if get_lang() == "cn" else "Please enter an age between 18 and 120."),
             )
 
         grew_up_state = request.form.get("grew_up_state", "").strip()
@@ -509,7 +543,8 @@ def create_app():
                 genders=GENDERS,
                 us_states=US_STATES,
                 china_provinces=CHINA_PROVINCES,
-                error="Please select a U.S. state.",
+                lang=get_lang(),
+                error=("请选择一个美国州。" if get_lang() == "cn" else "Please select a U.S. state."),
             )
 
         if grew_up_region == "China" and not grew_up_province:
@@ -519,7 +554,8 @@ def create_app():
                 genders=GENDERS,
                 us_states=US_STATES,
                 china_provinces=CHINA_PROVINCES,
-                error="Please select a Chinese province.",
+                lang=get_lang(),
+                error=("请选择一个中国省份。" if get_lang() == "cn" else "Please select a Chinese province."),
             )
         payload = {
             "age": age,
@@ -538,7 +574,7 @@ def create_app():
         )
         g.db.commit()
 
-        return redirect(url_for("task"))
+        return redirect(url_for("task", lang=get_lang()))
 
     @app.get("/task")
     def task():
@@ -549,7 +585,7 @@ def create_app():
         if not n_segments and duration_sec is not None:
             n_segments = compute_n_segments(duration_sec)
         if n_segments is not None and segment_idx >= int(n_segments):
-            return redirect(url_for("post_dialog"))
+            return redirect(url_for("post_dialog", lang=get_lang()))
 
         segment_start_sec, segment_end_sec = get_segment_bounds(segment_idx, duration_sec)
 
@@ -577,6 +613,7 @@ def create_app():
             emotions=EMOTIONS,
             run_id=session["run_id"],
             video_id=session["video_id"],
+            lang=get_lang(),
         )
 
     @app.post("/init_video")
@@ -612,7 +649,7 @@ def create_app():
 
         n_segments = session.get("n_segments")
         if n_segments is not None and segment_idx >= int(n_segments):
-            return redirect(url_for("post_dialog"))
+            return redirect(url_for("post_dialog", lang=get_lang()))
 
         ratings = {}
         for e in EMOTIONS:
@@ -666,7 +703,8 @@ def create_app():
                 emotions=EMOTIONS,
                 run_id=session["run_id"],
                 video_id=session["video_id"],
-                error="Please answer all segment questions, move every slider at least once, and provide your primary felt emotion(s) before continuing.",
+                lang=get_lang(),
+                error=("请回答所有片段问题，至少拖动每个滑块一次，并填写该片段最主要的内心情绪后再继续。" if get_lang() == "cn" else "Please answer all segment questions, move every slider at least once, and provide your primary felt emotion(s) before continuing."),
             )
 
         g.db.execute(
@@ -683,9 +721,9 @@ def create_app():
         session["segment_idx"] = next_segment_idx
 
         if n_segments is not None and next_segment_idx >= int(n_segments):
-            return redirect(url_for("post_dialog"))
+            return redirect(url_for("post_dialog", lang=get_lang()))
 
-        return redirect(url_for("task"))
+        return redirect(url_for("task", lang=get_lang()))
 
     @app.get("/post_dialog")
     def post_dialog():
@@ -696,7 +734,9 @@ def create_app():
             regions=REGIONS,
             us_states=US_STATES,
             china_provinces=CHINA_PROVINCES,
-            svi_facets=SVI_FACETS,
+            svi_facets=SVI_FACETS[get_lang()],
+            post_scenario_facets=POST_SCENARIO_FACETS[get_lang()],
+            lang=get_lang(),
             target_side=session["target_side"],
         )
 
@@ -722,10 +762,16 @@ def create_app():
         moved_overall_ok = all(request.form.get(f"touch_self_overall_{key}") == "1" for key, _ in overall_items)
 
         svi = {}
-        for key, _label in SVI_FACETS:
+        for key, _label in SVI_FACETS[get_lang()]:
             svi[key] = request.form.get(key, "").strip()
 
-        moved_svi_ok = all(request.form.get(f"touch_{key}") == "1" for key, _ in SVI_FACETS)
+        moved_svi_ok = all(request.form.get(f"touch_{key}") == "1" for key, _ in SVI_FACETS[get_lang()])
+
+        post_scenario = {}
+        for key, _title, _label, _hint in POST_SCENARIO_FACETS[get_lang()]:
+            post_scenario[key] = request.form.get(key, "").strip()
+
+        moved_post_scenario_ok = all(request.form.get(f"touch_{key}") == "1" for key, _, _, _ in POST_SCENARIO_FACETS[get_lang()])
 
         origin_region = request.form.get("origin_region", "").strip()
         origin_state = request.form.get("origin_state", "").strip()
@@ -738,9 +784,11 @@ def create_app():
                 regions=REGIONS,
                 us_states=US_STATES,
                 china_provinces=CHINA_PROVINCES,
-                svi_facets=SVI_FACETS,
+                svi_facets=SVI_FACETS[get_lang()],
+                post_scenario_facets=POST_SCENARIO_FACETS[get_lang()],
+                lang=get_lang(),
                 target_side=session["target_side"],
-                error="Please select a U.S. state.",
+                error=("请选择一个美国州。" if get_lang() == "cn" else "Please select a U.S. state."),
             )
 
         if origin_region == "China" and not origin_province:
@@ -750,9 +798,11 @@ def create_app():
                 regions=REGIONS,
                 us_states=US_STATES,
                 china_provinces=CHINA_PROVINCES,
-                svi_facets=SVI_FACETS,
+                svi_facets=SVI_FACETS[get_lang()],
+                post_scenario_facets=POST_SCENARIO_FACETS[get_lang()],
+                lang=get_lang(),
                 target_side=session["target_side"],
-                error="Please select a Chinese province.",
+                error=("请选择一个中国省份。" if get_lang() == "cn" else "Please select a Chinese province."),
             )
 
         origin_detail = origin_state if origin_region == "United States" else (origin_province if origin_region == "China" else "")
@@ -768,8 +818,10 @@ def create_app():
             any(overall[k] == "" for k, _ in overall_items)
             or felt_primary_overall == ""
             or not moved_overall_ok
-            or any(svi[k] == "" for k, _ in SVI_FACETS)
+            or any(svi[k] == "" for k, _ in SVI_FACETS[get_lang()])
             or not moved_svi_ok
+            or any(post_scenario[k] == "" for k, _, _, _ in POST_SCENARIO_FACETS[get_lang()])
+            or not moved_post_scenario_ok
         ):
             return render_template(
                 "post.html",
@@ -777,9 +829,11 @@ def create_app():
                 regions=REGIONS,
                 us_states=US_STATES,
                 china_provinces=CHINA_PROVINCES,
-                svi_facets=SVI_FACETS,
+                svi_facets=SVI_FACETS[get_lang()],
+                post_scenario_facets=POST_SCENARIO_FACETS[get_lang()],
+                lang=get_lang(),
                 target_side=session["target_side"],
-                error="Please answer all final questions and interact with every slider at least once.",
+                error=("请回答所有最终问题，并至少拖动每个滑块一次。" if get_lang() == "cn" else "Please answer all final questions and interact with every slider at least once."),
             )
 
         payload = {
@@ -787,6 +841,7 @@ def create_app():
             "felt_primary_overall": felt_primary_overall,
             "origin_guess": origin_guess,
             "svi": svi,
+            "post_scenario": post_scenario,
         }
 
         completion_code = make_completion_code(session["participant_id"])
@@ -797,7 +852,7 @@ def create_app():
         )
         g.db.commit()
 
-        return redirect(url_for("done"))
+        return redirect(url_for("done", lang=get_lang()))
 
     @app.get("/done")
     def done():
@@ -805,7 +860,7 @@ def create_app():
         run_id = session["run_id"]
         row = g.db.execute("SELECT completion_code FROM runs WHERE run_id=?", (run_id,)).fetchone()
         code = row["completion_code"] if row else None
-        return render_template("done.html", code=code)
+        return render_template("done.html", code=code, lang=get_lang())
 
     @app.get("/admin/exports.csv")
     def export_csv():

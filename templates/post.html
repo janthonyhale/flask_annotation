@@ -90,6 +90,17 @@
         </div>
       {% endfor %}
 
+      <h2>Scenario engagement</h2>
+      {% for key, label, hint in post_scenario_facets %}
+        <div class="q slider-q">
+          <label for="{{ key }}">{{ label }}: <span id="val_{{ key }}">3</span></label>
+          <input id="{{ key }}" type="range" min="1" max="5" step="1" value="3"
+                 name="{{ key }}" class="rating-slider" data-value-id="val_{{ key }}" data-touch-id="touch_{{ key }}" required>
+          <input type="hidden" id="touch_{{ key }}" name="touch_{{ key }}" value="0">
+          <div class="hint">{{ hint }}</div>
+        </div>
+      {% endfor %}
+
       <button class="btn" type="submit">Finish & Get Code</button>
     </form>
   </div>

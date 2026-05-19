@@ -1,0 +1,19 @@
+# Video source list used by app.py
+#
+# One entry per line. Blank lines and lines beginning with # are ignored.
+#
+# Supported formats:
+# 1) Full URL (video_id is inferred from filename)
+#    https://kodis-video.s3.amazonaws.com/my_video_01.mp4
+#
+# 2) S3 object key / filename (resolved against the bucket base URL)
+#    folder/my_video_02.mp4
+#
+# 3) Explicit video ID + source
+#    my_custom_id,https://kodis-video.s3.amazonaws.com/some/path/video_03.mp4
+#
+# Default S3 base URL: https://kodis-video.s3.amazonaws.com
+# To change bucket without editing code, set env var VIDEO_S3_BUCKET.
+
+video_01.mp4
+video_02.mp4

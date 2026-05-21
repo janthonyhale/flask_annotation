@@ -57,7 +57,7 @@
 
     <form method="post" action="{{ url_for('consent_post') }}">
       <input type="hidden" name="lang" value="{{ lang }}">
-      <button class="btn" type="submit">I agree</button>
+      <button class="btn" type="submit">{{ "我同意" if lang == "cn" else "I agree" }}</button>
     </form>
   </div>
 </body>

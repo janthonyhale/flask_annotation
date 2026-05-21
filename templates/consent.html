@@ -1,0 +1,64 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>{{ "知情同意" if lang == "cn" else "Consent" }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+</head>
+<body>
+  <div class="container">
+    <h1>{{ "南加利福尼亚大学信息表格" if lang == "cn" else "University of Southern California Information Sheet" }}</h1>
+
+    {% if error %}
+      <div class="error">{{ error }}</div>
+    {% endif %}
+
+    {% if lang == "cn" %}
+      <p>我是乔纳森·格拉奇（Jonathan Gratch），是南加利福尼亚大学的教授。</p>
+      <p>我正在开展一项针对个人价值观是如何影响人们做出社交决策的研究。这项研究的名称为“文化对冲突中言语与非言语表达的影响”。我诚邀您参与这项研究。</p>
+      <p>您的参与是完全自愿的，我将在研究之前或期间回答您的问题或疑虑。</p>
+      <p>如果您符合以下标准，您可能有资格参与此研究：</p>
+      <p>您能够流利地讲普通话。</p>
+      <p>您年满18岁。</p>
+
+      <h2>研究内容</h2>
+      <p>如果您决定参与此研究，您将被要求进行以下活动：</p>
+      <p>1. 回答人口统计学相关问题。</p>
+      <p>2. 观看一段两个人发生争执的视频，并回答一些关于您对视频中发生情况的看法的问题。</p>
+      <p>3. 完成一份关于您所观看视频的后续问卷。</p>
+
+      <h2>补偿</h2>
+      <p>完成这些活动后，您将按每小时 12 美元的标准获得补偿。参加本研究不会产生任何费用。您将通过您访问该任务所使用的在线服务收到补偿。</p>
+      <p>如果您因无法控制的技术问题而无法完成研究，研究团队可能会根据您已完成的任务部分按比例发放部分补偿。</p>
+
+      <h2>数据处理与保密</h2>
+      <p>我会在科学出版物中发表本研究的结果。研究结果中不会识别出参与者的身份。我会采取合理措施保护您的所有个人信息安全。所有数据在任何发表或展示之前都会进行去标识化处理。未来，我可能会与其他研究人员共享去标识化后的数据。</p>
+    {% else %}
+      <p>My name is Jonathan Gratch, and I am a faculty member at the University of Southern California.</p>
+      <p>I am conducting a research study on how culture and emotional expressions shape how people make social decisions. The name of this research study is Impact of Culture on Verbal and Nonverbal Expressions of Conflict. I am seeking your participation in this study.</p>
+      <p>Your participation is completely voluntary, and I will address your questions or concerns at any point before or during the study.</p>
+      <p>You may be eligible to participate in this study if you meet the following criteria:</p>
+      <p>You are a fluent speaker of English.</p>
+      <p>You are over 18 years old.</p>
+
+      <h2>What you will do</h2>
+      <p>If you decide to participate in this study, you will be asked to do the following activities:</p>
+      <p>Answer demographic questions.</p>
+      <p>Watch a video of two people engaging in a dispute, and answer some questions about your perceptions of what’s happening.</p>
+      <p>Complete a post-survey regarding the video you watched.</p>
+
+      <h2>Compensation</h2>
+      <p>After you complete these activities, you will be compensated at a rate of $12 per hour. There is no cost to you for taking part in this study. You will receive compensation through the online service you used to access the task.</p>
+      <p>If you are unable to complete the study because of technical problems beyond your control, the research team may issue partial compensation in proportion to the completed portions of the task.</p>
+
+      <h2>Data handling and confidentiality</h2>
+      <p>I will publish the results in scientific publications. Participants will not be identified in the results. I will take reasonable measures to protect the security of all your personal information. All data will be de-identified prior to any publication or presentation. I may share your data, de-identified with other researchers in the future.</p>
+    {% endif %}
+
+    <form method="post" action="{{ url_for('consent_post') }}">
+      <input type="hidden" name="lang" value="{{ lang }}">
+      <button class="btn" type="submit">{{ "我同意" if lang == "cn" else "I agree" }}</button>
+    </form>
+  </div>
+</body>
+</html>

@@ -494,6 +494,17 @@ def create_app():
         )
         g.db.commit()
 
+        return redirect(url_for("consent", lang=get_lang()))
+
+
+    @app.get("/consent")
+    def consent():
+        ensure_session()
+        return render_template("consent.html", lang=get_lang())
+
+    @app.post("/consent")
+    def consent_post():
+        ensure_session()
         return redirect(url_for("demographics", lang=get_lang()))
 
     @app.get("/demographics")

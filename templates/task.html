@@ -63,7 +63,12 @@
     <h1>{{ "片段" if lang == "cn" else "Segment" }} <span class="js-current-seg">{{ segment_idx + 1 }}</span>/<span class="js-total-seg">?</span></h1>
 
     <div class="instructions">
-      <strong>{{ "要点：" if lang == "cn" else "Important:" }}</strong> {{ "你会看到两个人。请只评定红框内人物的情绪。不要跳看视频，请按顺序观看本片段。" if lang == "cn" else "You will see both people. Only rate emotions for the person inside the red box. Do not skip around in the video; watch the segment in order." }}
+      <strong>{{ "要点：" if lang == "cn" else "Important:" }}</strong>
+      {% if audio_only %}
+        {{ "您会看到代表两位说话者的两个球体。请只评定红框内球体所代表人物的情绪。请按顺序收听本片段。" if lang == "cn" else "You will see two spheres representing the speakers. Only rate emotions for the person represented by the sphere inside the red box. Listen to the segment in order." }}
+      {% else %}
+        {{ "你会看到两个人。请只评定红框内人物的情绪。不要跳看视频，请按顺序观看本片段。" if lang == "cn" else "You will see both people. Only rate emotions for the person inside the red box. Do not skip around in the video; watch the segment in order." }}
+      {% endif %}
     </div>
 
     {% if error %}
@@ -73,10 +78,16 @@
     <div class="task-layout">
       <div class="task-video-col">
         <div class="video-wrap" style="position:relative;">
-          <video id="vid" preload="metadata" playsinline>
-            <source src="{{ video_path }}" type="{{ video_mime }}">
-            {{ "你的浏览器不支持 video 标签。" if lang == "cn" else "Your browser does not support the video tag." }}
-          </video>
+          {% if audio_only %}
+            <canvas id="audioCanvas" class="audio-visualizer"></canvas>
+            <audio id="vid" preload="metadata" crossorigin="anonymous" src="{{ audio_channel_2_url }}"></audio>
+            <audio id="audioChannel1" preload="metadata" crossorigin="anonymous" src="{{ audio_channel_1_url }}"></audio>
+          {% else %}
+            <video id="vid" preload="metadata" playsinline{% if video_only %} muted{% endif %}>
+              <source src="{{ video_path }}" type="{{ video_mime }}">
+              {{ "你的浏览器不支持 video 标签。" if lang == "cn" else "Your browser does not support the video tag." }}
+            </video>
+          {% endif %}
 
           <div id="highlight" class="highlight {{ target_side }}"></div>
 
@@ -92,6 +103,12 @@
           <div class="meta-left" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
             <span class="meta-chip">{{ "片段" if lang == "cn" else "Seg" }} <strong class="js-current-seg">{{ segment_idx + 1 }}</strong>/<strong class="js-total-seg">?</strong></span>
             <span class="meta-chip">{{ "每段 1 分钟" if lang == "cn" else "1 min each" }}</span>
+            {% if video_only and not audio_only %}
+              <span class="meta-chip">{{ "仅视频（无音频）" if lang == "cn" else "Video only (no audio)" }}</span>
+            {% endif %}
+            {% if audio_only %}
+              <span class="meta-chip">{{ "仅音频" if lang == "cn" else "Audio only" }}</span>
+            {% endif %}
             <span class="meta-chip">{{ "剩余时间：" if lang == "cn" else "Time left:" }} <strong><span class="js-time-left">--:--</span></strong></span>
           </div>
         </div>
@@ -130,7 +147,24 @@
             {% endfor %}
           </div>
 
+          <div class="q slider-q">
+            <label for="dispute_outcome_prediction">
+              {{ "您认为这场争议最终会陷入僵局还是成功解决？" if lang == "cn" else "Do you think this dispute will end in impasse or success?" }}:
+              <span id="val_dispute_outcome_prediction">4</span>
+            </label>
+            <input id="dispute_outcome_prediction" type="range" min="1" max="7" step="1" value="4"
+                   name="dispute_outcome_prediction" class="rating-slider"
+                   data-value-id="val_dispute_outcome_prediction"
+                   data-touch-id="touch_dispute_outcome_prediction">
+            <input type="hidden" id="touch_dispute_outcome_prediction"
+                   name="touch_dispute_outcome_prediction" value="0">
+            <div class="hint">{{ "1 = 肯定陷入僵局，7 = 肯定成功解决" if lang == "cn" else "1 = Impasse, 7 = Success" }}</div>
+          </div>
+
           <label for="felt_primary"><strong>{{ "这个片段中，红框中的人内心最可能感受到哪些主要情绪？" if lang == "cn" else "What was the primary emotion(s) the highlighted person likely FELT during this segment?" }}</strong></label>
+          {% if lang == "cn" %}
+            <div class="hint">请使用中文回答。</div>
+          {% endif %}
           <textarea id="felt_primary" name="felt_primary" rows="2"></textarea>
 
 
@@ -150,6 +184,10 @@
   const segmentOverlapSeconds = {{ segment_overlap_seconds|int }};
   const segmentStrideSeconds = {{ segment_stride_seconds|int }};
   const segmentIdx = {{ segment_idx|int }};
+  const videoOnly = {{ "true" if video_only else "false" }};
+  const audioOnly = {{ "true" if audio_only else "false" }};
+  const buyerOffsetSeconds = {{ buyer_offset_ms|int }} / 1000;
+  const sellerOffsetSeconds = {{ seller_offset_ms|int }} / 1000;
   const backendSegmentStart = {{ segment_start_sec|float }};
   const backendSegmentEnd = {{ segment_end_sec|float }};
 
@@ -160,7 +198,188 @@
   const status = document.getElementById("segmentStatus");
   const endTimeLabel = document.getElementById("endTimeLabel");
   const pauseOverlay = document.getElementById("pauseOverlay");
+  const audioChannel1 = document.getElementById("audioChannel1");
+  const audioCanvas = document.getElementById("audioCanvas");
   let sentVideoInit = false;
+  let audioContext = null;
+  let channel1Analyser = null;
+  let channel2Analyser = null;
+  let audioVisualizationInitialized = false;
+  let audioTimelinePosition = 0;
+  let audioTimelineStartedAt = 0;
+  let audioTimelinePlaying = false;
+  let audioConversationEnd = 0;
+  let audioStartTimers = [];
+
+  if (videoOnly && !audioOnly && vid) {
+    vid.muted = true;
+    vid.volume = 0;
+    vid.addEventListener("volumechange", () => {
+      if (!vid.muted || vid.volume !== 0) {
+        vid.muted = true;
+        vid.volume = 0;
+      }
+    });
+  }
+
+  function clearAudioStartTimers() {
+    audioStartTimers.forEach(timer => clearTimeout(timer));
+    audioStartTimers = [];
+  }
+
+  function getAudioTimelineTime() {
+    if (!audioTimelinePlaying) return audioTimelinePosition;
+    const elapsed = (performance.now() - audioTimelineStartedAt) / 1000;
+    return Math.min(audioConversationEnd, audioTimelinePosition + elapsed);
+  }
+
+  function placeAudioChannel(media, offsetSeconds, timelineSeconds) {
+    media.pause();
+    const localTime = timelineSeconds - offsetSeconds;
+    if (localTime <= 0) {
+      media.currentTime = 0;
+    } else if (isFinite(media.duration)) {
+      media.currentTime = Math.min(localTime, media.duration);
+    }
+  }
+
+  function seekAudioTimeline(timelineSeconds) {
+    if (!audioOnly) return;
+    clearAudioStartTimers();
+    audioTimelinePlaying = false;
+    audioTimelinePosition = Math.max(
+      0,
+      Math.min(timelineSeconds, audioConversationEnd || timelineSeconds)
+    );
+    placeAudioChannel(audioChannel1, buyerOffsetSeconds, audioTimelinePosition);
+    placeAudioChannel(vid, sellerOffsetSeconds, audioTimelinePosition);
+  }
+
+  function scheduleAudioChannel(media, offsetSeconds) {
+    const localTime = audioTimelinePosition - offsetSeconds;
+    if (localTime >= media.duration) return;
+    if (localTime >= 0) {
+      media.currentTime = localTime;
+      media.play().catch(() => {});
+      return;
+    }
+    media.currentTime = 0;
+    const timer = setTimeout(() => {
+      if (audioTimelinePlaying) media.play().catch(() => {});
+    }, -localTime * 1000);
+    audioStartTimers.push(timer);
+  }
+
+  async function startAudioTimeline() {
+    clearAudioStartTimers();
+    audioTimelineStartedAt = performance.now();
+    audioTimelinePlaying = true;
+    scheduleAudioChannel(audioChannel1, buyerOffsetSeconds);
+    scheduleAudioChannel(vid, sellerOffsetSeconds);
+    const tick = () => {
+      if (!audioTimelinePlaying) return;
+      updatePlaybackProgress();
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }
+
+  function pauseAudioTimeline() {
+    if (!audioOnly) return;
+    audioTimelinePosition = getAudioTimelineTime();
+    audioTimelinePlaying = false;
+    clearAudioStartTimers();
+    audioChannel1.pause();
+    vid.pause();
+  }
+
+  function initializeAudioVisualization() {
+    if (!audioOnly || audioVisualizationInitialized || !audioCanvas) return;
+    audioVisualizationInitialized = true;
+    try {
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      audioContext = new AudioContextClass();
+      channel1Analyser = audioContext.createAnalyser();
+      channel2Analyser = audioContext.createAnalyser();
+      channel1Analyser.fftSize = 512;
+      channel2Analyser.fftSize = 512;
+      const channel1Source = audioContext.createMediaElementSource(audioChannel1);
+      const channel2Source = audioContext.createMediaElementSource(vid);
+      channel1Source.connect(channel1Analyser);
+      channel2Source.connect(channel2Analyser);
+      channel1Analyser.connect(audioContext.destination);
+      channel2Analyser.connect(audioContext.destination);
+    } catch (error) {
+      console.warn("Audio visualization unavailable:", error);
+    }
+  }
+
+  if (audioOnly && audioCanvas) {
+    const ctx = audioCanvas.getContext("2d");
+    const channel1Data = new Uint8Array(256);
+    const channel2Data = new Uint8Array(256);
+    let animationTime = 0;
+
+    function resizeAudioCanvas() {
+      const ratio = window.devicePixelRatio || 1;
+      const rect = audioCanvas.getBoundingClientRect();
+      audioCanvas.width = Math.max(1, Math.round(rect.width * ratio));
+      audioCanvas.height = Math.max(1, Math.round(rect.height * ratio));
+      ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+    }
+
+    function audioLevel(analyser, data) {
+      if (!analyser) return 0;
+      analyser.getByteTimeDomainData(data);
+      let sum = 0;
+      for (let i = 0; i < data.length; i++) {
+        const value = (data[i] - 128) / 128;
+        sum += value * value;
+      }
+      return Math.sqrt(sum / data.length);
+    }
+
+    function drawSphere(x, y, color, level) {
+      const radius = 70 + Math.min(level, 0.5) * 220;
+      const jiggle = level * 20;
+      const dx = Math.sin(animationTime * 3 + x) * jiggle;
+      const dy = Math.cos(animationTime * 4 + y) * jiggle;
+      const gradient = ctx.createRadialGradient(
+        x - radius * 0.2, y - radius * 0.2, radius * 0.1,
+        x, y, radius
+      );
+      gradient.addColorStop(0, "white");
+      gradient.addColorStop(0.2, color);
+      gradient.addColorStop(1, "black");
+      ctx.beginPath();
+      ctx.fillStyle = gradient;
+      ctx.arc(x + dx, y + dy, radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.lineWidth = 5 + level * 8;
+      ctx.strokeStyle = color;
+      ctx.stroke();
+    }
+
+    function animateAudio() {
+      requestAnimationFrame(animateAudio);
+      animationTime += 0.02;
+      const width = audioCanvas.clientWidth;
+      const height = audioCanvas.clientHeight;
+      ctx.fillStyle = "#111";
+      ctx.fillRect(0, 0, width, height);
+      drawSphere(width * 0.3, height / 2, "#4FC3F7", audioLevel(channel1Analyser, channel1Data));
+      drawSphere(width * 0.7, height / 2, "#FF8A65", audioLevel(channel2Analyser, channel2Data));
+      ctx.fillStyle = "white";
+      ctx.font = "20px Arial";
+      ctx.textAlign = "center";
+      ctx.fillText(lang === "cn" ? "说话者 1" : "Speaker 1", width * 0.3, 40);
+      ctx.fillText(lang === "cn" ? "说话者 2" : "Speaker 2", width * 0.7, 40);
+    }
+
+    resizeAudioCanvas();
+    window.addEventListener("resize", resizeAudioCanvas);
+    animateAudio();
+  }
 
   // ---- Make "Continue" immune to browser validation messages ----
   // (Those messages come from HTML5 constraint validation on submit buttons.)
@@ -196,7 +415,7 @@
 
   // ---- Answer tracking (touch hidden fields + felt text) ----
   function allAnswered(){
-    const sliders = Array.from(document.querySelectorAll('input[type="range"][name^="exp_"]'));
+    const sliders = Array.from(document.querySelectorAll('input.rating-slider'));
     if (!sliders.length) return false;
 
     const slidersOk = sliders.every(sl => {
@@ -211,7 +430,12 @@
   }
 
   function isPlaying(){
-    return !!vid && !vid.paused && !vid.ended;
+    return audioOnly ? audioTimelinePlaying : !!vid && !vid.paused && !vid.ended;
+  }
+
+  function currentTimelineTime() {
+    if (!audioOnly || !audioChannel1) return vid.currentTime;
+    return getAudioTimelineTime();
   }
 
   function updateContinue(){
@@ -221,7 +445,7 @@
   }
 
   // Mark sliders "touched"
-  const sliders = Array.from(document.querySelectorAll('input[type="range"][name^="exp_"]'));
+  const sliders = Array.from(document.querySelectorAll('input.rating-slider'));
   sliders.forEach(sl => {
     const mark = () => {
       const hid = document.getElementById("touch_" + sl.name);
@@ -264,27 +488,40 @@
 
   async function ensureMetadata(){
     if (initialized) return;
-    // Some browsers won't populate duration until load() is called.
-    try { vid.load(); } catch(e) {}
-    await new Promise((resolve) => {
-      if (vid.readyState >= 1 && isFinite(vid.duration) && vid.duration > 0) return resolve();
-      const done = () => { cleanup(); resolve(); };
-      const cleanup = () => {
-        vid.removeEventListener("loadedmetadata", done);
-        vid.removeEventListener("durationchange", done);
-        vid.removeEventListener("canplay", done);
-      };
-      vid.addEventListener("loadedmetadata", done, { once: true });
-      vid.addEventListener("durationchange", done, { once: true });
-      vid.addEventListener("canplay", done, { once: true });
-    });
+    function waitForMetadata(media) {
+      if (!media) return Promise.resolve();
+      try { media.load(); } catch(e) {}
+      return new Promise((resolve) => {
+        if (media.readyState >= 1 && isFinite(media.duration) && media.duration > 0) return resolve();
+        const done = () => { cleanup(); resolve(); };
+        const cleanup = () => {
+          media.removeEventListener("loadedmetadata", done);
+          media.removeEventListener("durationchange", done);
+          media.removeEventListener("canplay", done);
+        };
+        media.addEventListener("loadedmetadata", done, { once: true });
+        media.addEventListener("durationchange", done, { once: true });
+        media.addEventListener("canplay", done, { once: true });
+      });
+    }
+    await Promise.all([
+      waitForMetadata(vid),
+      audioOnly ? waitForMetadata(audioChannel1) : Promise.resolve(),
+    ]);
 
     initialized = true;
+    const mediaDuration = audioOnly
+      ? Math.max(
+          sellerOffsetSeconds + vid.duration,
+          buyerOffsetSeconds + audioChannel1.duration
+        )
+      : vid.duration;
+    if (audioOnly) audioConversationEnd = mediaDuration;
 
-    if (!sentVideoInit && isFinite(vid.duration) && vid.duration > 0) {
+    if (!sentVideoInit && isFinite(mediaDuration) && mediaDuration > 0) {
       sentVideoInit = true;
       const data = new URLSearchParams();
-      data.set("duration_sec", String(vid.duration));
+      data.set("duration_sec", String(mediaDuration));
       fetch("{{ url_for('init_video') }}", {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -294,21 +531,27 @@
     }
 
     // Clamp to duration
-    if (segmentStart > vid.duration) segmentStart = Math.max(0, vid.duration - SEGMENT_SECONDS);
-    segmentEnd = Math.min(segmentEnd, vid.duration);
+    if (segmentStart > mediaDuration) segmentStart = Math.max(0, mediaDuration - SEGMENT_SECONDS);
+    segmentEnd = Math.min(segmentEnd, mediaDuration);
 
-    const computedTotalSegments = Math.max(1, Math.ceil(Math.max(0, vid.duration - SEGMENT_SECONDS) / segmentStrideSeconds) + 1);
+    const computedTotalSegments = Math.max(1, Math.ceil(Math.max(0, mediaDuration - SEGMENT_SECONDS) / segmentStrideSeconds) + 1);
     setTotalSegments(computedTotalSegments);
     endTimeLabel.textContent = fmt(segmentEnd);
     setTimeLeft(segmentEnd - segmentStart);
 
     // Seek to start (no autoplay)
-    try { vid.pause(); } catch(e) {}
-    try { vid.currentTime = segmentStart; } catch(e) {}
+    if (audioOnly) {
+      seekAudioTimeline(segmentStart);
+    } else {
+      try { vid.pause(); } catch(e) {}
+      try { vid.currentTime = segmentStart; } catch(e) {}
+    }
 
     if (status) {
       const overlapMsg = segmentIdx > 0 && segmentOverlapSeconds > 0
-        ? ` This segment includes the last ${segmentOverlapSeconds} second${segmentOverlapSeconds === 1 ? "" : "s"} of the previous segment.`
+        ? (lang === "cn"
+            ? ` 本片段包含上一片段最后 ${segmentOverlapSeconds} 秒的内容。`
+            : ` This segment includes the last ${segmentOverlapSeconds} second${segmentOverlapSeconds === 1 ? "" : "s"} of the previous segment.`)
         : "";
       status.textContent = (lang === "cn" ? `点击“播放”。本片段从 ${fmt(segmentStart)} 到 ${fmt(segmentEnd)}，播放到 ${fmt(segmentEnd)} 会自动暂停。` : `Press Play. This segment runs from ${fmt(segmentStart)} to ${fmt(segmentEnd)} and will pause automatically at ${fmt(segmentEnd)}.`) + overlapMsg;
     }
@@ -323,11 +566,21 @@
       if (segmentDone) return;
 
       // Keep within the segment
-      if (vid.currentTime < segmentStart || vid.currentTime > segmentEnd){
-        try { vid.currentTime = segmentStart; } catch(e) {}
+      const timelineTime = currentTimelineTime();
+      if (timelineTime < segmentStart || timelineTime > segmentEnd){
+        if (audioOnly) {
+          seekAudioTimeline(segmentStart);
+        } else {
+          try { vid.currentTime = segmentStart; } catch(e) {}
+        }
       }
 
-      if (vid.paused){
+      if (audioOnly) {
+        initializeAudioVisualization();
+        if (audioContext) await audioContext.resume();
+        if (audioTimelinePlaying) pauseAudioTimeline();
+        else await startAudioTimeline();
+      } else if (vid.paused){
         try { await vid.play(); } catch(e) {}
       } else {
         try { vid.pause(); } catch(e) {}
@@ -341,20 +594,29 @@
   vid.addEventListener("pause", () => { setPlayLabel(); updateContinue(); });
 
   // ---- Auto-stop at segment end ----
-  vid.addEventListener("timeupdate", () => {
+  function updatePlaybackProgress() {
     if (!initialized) return;
 
-    const left = segmentEnd - vid.currentTime;
+    const timelineTime = currentTimelineTime();
+    const left = segmentEnd - timelineTime;
     setTimeLeft(left);
 
-    if (!segmentDone && vid.currentTime >= segmentEnd - 0.05){
+    if (!segmentDone && timelineTime >= segmentEnd - 0.05){
       segmentDone = true;
-      try { vid.pause(); } catch(e) {}
-      try { vid.currentTime = segmentEnd; } catch(e) {}
+      if (audioOnly) {
+        pauseAudioTimeline();
+        audioTimelinePosition = segmentEnd;
+      } else {
+        try { vid.pause(); } catch(e) {}
+        try { vid.currentTime = segmentEnd; } catch(e) {}
+      }
 
       // Visual "segment complete" cues (unchanged from your intent)
-      vid.style.filter = "grayscale(1)";
-      vid.style.opacity = "0.45";
+      const visual = audioOnly ? audioCanvas : vid;
+      if (visual) {
+        visual.style.filter = "grayscale(1)";
+        visual.style.opacity = "0.45";
+      }
       if (pauseOverlay) pauseOverlay.style.display = "flex";
       if (status) status.textContent = "{{ "该片段已完成。请先回答右侧问题再继续。" if lang == "cn" else "Segment complete. Please answer the questions on the right to continue." }}";
       if (playBtn) { playBtn.disabled = true; playBtn.textContent = (lang === "cn" ? "片段完成" : "Segment complete"); }
@@ -362,7 +624,10 @@
       setTimeLeft(0);
       updateContinue();
     }
-  });
+  }
+
+  vid.addEventListener("timeupdate", updatePlaybackProgress);
+  if (audioChannel1) audioChannel1.addEventListener("timeupdate", updatePlaybackProgress);
 
   // Init metadata early so top "?" becomes N (but does NOT autoplay)
   ensureMetadata();

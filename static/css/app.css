@@ -112,6 +112,19 @@ video {
   border: 1px solid #ddd;
 }
 
+.audio-visualizer {
+  display: block;
+  width: 100%;
+  height: 420px;
+  border-radius: 14px;
+  background: #111;
+  border: 1px solid #ddd;
+}
+
+.video-wrap audio {
+  display: none;
+}
+
 .highlight {
   position: absolute;
   top: 8px;

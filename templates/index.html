@@ -17,6 +17,8 @@
     <form method="post" action="{{ url_for('start') }}">
       <input type="hidden" name="t" value="{{ t_value or '' }}">
       <input type="hidden" name="lang" value="{{ lang }}">
+      <input type="hidden" name="audio_only" value="{{ 'true' if audio_only else 'false' }}">
+      <input type="hidden" name="video_only" value="{{ 'true' if video_only else 'false' }}">
 
       <label for="participant_id">{{ "唯一标识符" if lang == "cn" else "Unique ID" }}</label>
       <input id="participant_id" name="participant_id" required

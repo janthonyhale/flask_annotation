@@ -1,0 +1,10 @@
+# Paired audio conversations used when the task starts with ?audio_only=true.
+#
+# Format:
+# conversation_id,buyer_url,seller_url,buyer_offset_ms,seller_offset_ms
+#
+# The buyer is shown on the left; the seller is shown on the right.
+# Each offset places that channel on the shared conversation timeline.
+
+#session_1_group_8,https://kodis-audio.s3.us-west-1.amazonaws.com/4c925866f64090c74b43479a3bebb450_session-1_group-8__uid_s_1__uid_e_av.wav,https://kodis-audio.s3.us-west-1.amazonaws.com/4c925866f64090c74b43479a3bebb450_session-1_group-8__uid_s_2__uid_e_av.wav,2560,0
+session-2_group-187,https://kodis-audio.s3.us-west-1.amazonaws.com/b8697a5fce4edd7ed4f88588f922f272_session-2_group-187__uid_s_1__uid_e_av.wav,https://kodis-audio.s3.us-west-1.amazonaws.com/b8697a5fce4edd7ed4f88588f922f272_session-2_group-187__uid_s_2__uid_e_av.wav,0,6380

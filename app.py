@@ -35,6 +35,7 @@ S3_BUCKET_NAME = os.environ.get("VIDEO_S3_BUCKET", "kodis-video")
 S3_REGION = os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION") or "us-west-2"
 S3_PRESIGN_EXPIRES = int(os.environ.get("VIDEO_URL_EXPIRES_SEC", "7200"))
 VIDEO_LIST_PATH = os.path.join(DATA_DIR, "video_sources.txt")
+AUDIO_LIST_PATH = os.path.join(DATA_DIR, "audio_sources.txt")
 
 # Legacy local static fallback (if no configured source list exists).
 # Supported extensions: .mp4, .webm, .mov, .m4v
@@ -144,6 +145,50 @@ def load_video_pool_from_config() -> list[dict]:
             parsed["video_id"] = dedup_id
             seen_ids.add(dedup_id)
             pool.append(parsed)
+    return pool
+
+
+def load_audio_pool_from_config() -> list[dict]:
+    """Load paired conversation channels from audio_sources.txt.
+
+    Format:
+    conversation_id,buyer_url,seller_url,buyer_offset_ms,seller_offset_ms
+    """
+    if not os.path.isfile(AUDIO_LIST_PATH):
+        return []
+
+    pool = []
+    seen_ids = set()
+    with open(AUDIO_LIST_PATH, "r", encoding="utf-8") as f:
+        for line_number, raw_line in enumerate(f, start=1):
+            line = raw_line.strip()
+            if not line or line.startswith("#"):
+                continue
+            parts = [part.strip() for part in line.split(",")]
+            if len(parts) != 5 or not all(parts[:3]):
+                raise ValueError(
+                    f"Invalid audio source on line {line_number}: expected "
+                    "conversation_id,buyer_url,seller_url,"
+                    "buyer_offset_ms,seller_offset_ms"
+                )
+            try:
+                buyer_offset_ms = max(0, int(parts[3]))
+                seller_offset_ms = max(0, int(parts[4]))
+            except ValueError as exc:
+                raise ValueError(
+                    f"Invalid buyer/seller offset on audio source line {line_number}"
+                ) from exc
+            conversation_id = parts[0]
+            if conversation_id in seen_ids:
+                raise ValueError(f"Duplicate audio conversation ID: {conversation_id}")
+            seen_ids.add(conversation_id)
+            pool.append({
+                "video_id": conversation_id,
+                "audio_channel_1_url": parts[1],
+                "audio_channel_2_url": parts[2],
+                "buyer_offset_ms": buyer_offset_ms,
+                "seller_offset_ms": seller_offset_ms,
+            })
     return pool
 
 
@@ -444,7 +489,16 @@ def create_app():
     def index():
         prefill_id = request.args.get("id", "").strip()
         t_value = request.args.get("t", "").strip()
-        return render_template("index.html", prefill_id=prefill_id, t_value=t_value, lang=get_lang())
+        audio_only = parse_bool_param(request.args.get("audio_only"))
+        video_only = parse_bool_param(request.args.get("video_only")) and not audio_only
+        return render_template(
+            "index.html",
+            prefill_id=prefill_id,
+            t_value=t_value,
+            audio_only=audio_only,
+            video_only=video_only,
+            lang=get_lang(),
+        )
 
     @app.post("/start")
     def start():
@@ -452,19 +506,25 @@ def create_app():
         if not participant_id:
             abort(400, "Unique ID is required")
 
+        audio_only = parse_bool_param(request.form.get("audio_only"))
+        video_only = parse_bool_param(request.form.get("video_only")) and not audio_only
         t_minutes = parse_target_minutes(request.form.get("t", "").strip())
-        video_pool = load_video_pool_from_config()
-        if not video_pool:
+        video_pool = load_audio_pool_from_config() if audio_only else load_video_pool_from_config()
+        if not video_pool and not audio_only:
             video_pool = load_video_pool_from_static()
         if not video_pool:
             return render_template(
                 "index.html",
                 error=(
+                    "No paired audio sources found in data/audio_sources.txt."
+                    if audio_only else
                     "No videos found. Add entries to data/video_sources.txt "
                     "(one S3 key or URL per line), or add local files to static/videos."
                 ),
                 prefill_id=participant_id,
                 t_value=request.form.get("t", "").strip(),
+                audio_only=audio_only,
+                video_only=video_only,
                 lang=get_lang(),
             )
 
@@ -479,6 +539,12 @@ def create_app():
         session["video_s3_bucket"] = assignment.get("s3_bucket")
         session["video_s3_key"] = assignment.get("s3_key")
         session["video_path"] = assignment.get("path")
+        session["audio_channel_1_url"] = assignment.get("audio_channel_1_url")
+        session["audio_channel_2_url"] = assignment.get("audio_channel_2_url")
+        session["buyer_offset_ms"] = assignment.get("buyer_offset_ms", 0)
+        session["seller_offset_ms"] = assignment.get("seller_offset_ms", 0)
+        session["audio_only"] = audio_only
+        session["video_only"] = video_only
         session["target_side"] = target_side
         session["duration_sec"] = None
         session["n_segments"] = None
@@ -590,6 +656,8 @@ def create_app():
     @app.get("/task")
     def task():
         ensure_session()
+        audio_only = bool(session.get("audio_only", False))
+        video_only = bool(session.get("video_only", False)) and not audio_only
         segment_idx = int(session.get("segment_idx", 0))
         duration_sec = float(session["duration_sec"]) if session.get("duration_sec") is not None else None
         n_segments = session.get("n_segments")
@@ -600,14 +668,16 @@ def create_app():
 
         segment_start_sec, segment_end_sec = get_segment_bounds(segment_idx, duration_sec)
 
-        video_url = resolve_video_source(
-            {
-                "url": session.get("video_source_url"),
-                "s3_bucket": session.get("video_s3_bucket"),
-                "s3_key": session.get("video_s3_key"),
-                "path": session.get("video_path"),
-            }
-        )
+        video_url = None
+        if not audio_only:
+            video_url = resolve_video_source(
+                {
+                    "url": session.get("video_source_url"),
+                    "s3_bucket": session.get("video_s3_bucket"),
+                    "s3_key": session.get("video_s3_key"),
+                    "path": session.get("video_path"),
+                }
+            )
 
         return render_template(
             "task.html",
@@ -624,6 +694,12 @@ def create_app():
             emotions=EMOTIONS,
             run_id=session["run_id"],
             video_id=session["video_id"],
+            video_only=video_only,
+            audio_only=audio_only,
+            audio_channel_1_url=session.get("audio_channel_1_url"),
+            audio_channel_2_url=session.get("audio_channel_2_url"),
+            buyer_offset_ms=session.get("buyer_offset_ms", 0),
+            seller_offset_ms=session.get("seller_offset_ms", 0),
             lang=get_lang(),
         )
 
@@ -649,6 +725,8 @@ def create_app():
     @app.post("/submit_segment")
     def submit_segment():
         ensure_session()
+        audio_only = bool(session.get("audio_only", False))
+        video_only = bool(session.get("video_only", False)) and not audio_only
         run_id = session["run_id"]
         segment_idx = int(request.form.get("segment_idx", -1))
         if segment_idx < 0:
@@ -684,19 +762,33 @@ def create_app():
             form_key = f"exp_{slug_key}"
             exp_ratings[slug_key] = request.form.get(form_key, "").strip()
 
+        dispute_outcome_prediction = request.form.get(
+            "dispute_outcome_prediction", ""
+        ).strip()
         felt_primary = request.form.get("felt_primary", "").strip()
 
 
         moved_exp_ok = all(request.form.get(f"touch_exp_{k}") == "1" for k, _ in exp_items)
-        if any(exp_ratings[k] == "" for k, _ in exp_items) or not moved_exp_ok or felt_primary == "":
-            video_url = resolve_video_source(
-                {
-                    "url": session.get("video_source_url"),
-                    "s3_bucket": session.get("video_s3_bucket"),
-                    "s3_key": session.get("video_s3_key"),
-                    "path": session.get("video_path"),
-                }
-            )
+        moved_outcome_ok = request.form.get(
+            "touch_dispute_outcome_prediction"
+        ) == "1"
+        if (
+            any(exp_ratings[k] == "" for k, _ in exp_items)
+            or not moved_exp_ok
+            or dispute_outcome_prediction == ""
+            or not moved_outcome_ok
+            or felt_primary == ""
+        ):
+            video_url = None
+            if not audio_only:
+                video_url = resolve_video_source(
+                    {
+                        "url": session.get("video_source_url"),
+                        "s3_bucket": session.get("video_s3_bucket"),
+                        "s3_key": session.get("video_s3_key"),
+                        "path": session.get("video_path"),
+                    }
+                )
             duration_sec = float(session["duration_sec"]) if session.get("duration_sec") is not None else None
             segment_start_sec, segment_end_sec = get_segment_bounds(segment_idx, duration_sec)
             return render_template(
@@ -714,6 +806,12 @@ def create_app():
                 emotions=EMOTIONS,
                 run_id=session["run_id"],
                 video_id=session["video_id"],
+                video_only=video_only,
+                audio_only=audio_only,
+                audio_channel_1_url=session.get("audio_channel_1_url"),
+                audio_channel_2_url=session.get("audio_channel_2_url"),
+                buyer_offset_ms=session.get("buyer_offset_ms", 0),
+                seller_offset_ms=session.get("seller_offset_ms", 0),
                 lang=get_lang(),
                 error=("请回答所有片段问题，至少拖动每个滑块一次，并填写该片段最主要的内心情绪后再继续。" if get_lang() == "cn" else "Please answer all segment questions, move every slider at least once, and provide your primary felt emotion(s) before continuing."),
             )
@@ -724,7 +822,19 @@ def create_app():
                 run_id, segment_idx, ratings_json, open_text, created_at_utc
             ) VALUES (?,?,?,?,?)
             """,
-            (run_id, segment_idx, json_dumps({"target_emotions": ratings, "expressed_items": exp_ratings, "felt_primary": felt_primary, "notes": open_text}), open_text, datetime.utcnow().isoformat()),
+            (
+                run_id,
+                segment_idx,
+                json_dumps({
+                    "target_emotions": ratings,
+                    "expressed_items": exp_ratings,
+                    "dispute_outcome_prediction": dispute_outcome_prediction,
+                    "felt_primary": felt_primary,
+                    "notes": open_text,
+                }),
+                open_text,
+                datetime.utcnow().isoformat(),
+            ),
         )
         g.db.commit()
 
@@ -1035,6 +1145,10 @@ def parse_target_minutes(raw: str):
     if value <= 0:
         return None
     return value
+
+
+def parse_bool_param(raw) -> bool:
+    return str(raw or "").strip().lower() in {"1", "true", "yes", "on"}
 
 
 def choose_video_assignment(db, participant_id: str, video_pool: list[dict], target_minutes=None) -> tuple[dict, str]:

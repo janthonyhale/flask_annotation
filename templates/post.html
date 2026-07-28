@@ -2,15 +2,16 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>{{ "最后的问题（整个对话）" if lang == "cn" else "Final Questions" }}</title>
+  <title>{{ "最后的问题（刚观看的整个对话）" if lang == "cn" else "Final Questions (Dialogue Just Viewed)" }}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
 </head>
 <body>
   <div class="container">
-    <h1>{{ "最后的问题（整个对话）" if lang == "cn" else "Final Questions (Entire Dialogue)" }}</h1>
+    <h1>{{ "最后的问题（刚观看的整个对话）" if lang == "cn" else "Final Questions (Dialogue Just Viewed)" }}</h1>
 
     <div class="instructions">
       <strong>{{ "提醒：" if lang == "cn" else "Reminder:" }}</strong> {{ "只评定指定人物（红框中的一侧）。" if lang == "cn" else "Rate only the person you were assigned to (the highlighted " ~ target_side ~ " side)." }}
+      {{ "以下问题只针对您刚刚观看并标注的这一个视频，而不是其他标注场次。" if lang == "cn" else "These questions refer only to the one video you just watched and annotated, not to any other annotation session." }}
       {{ "提交前，每个滑块都请至少拖动一次。" if lang == "cn" else "Move every slider at least once before submitting." }}
     </div>
 
@@ -47,6 +48,9 @@
       <label for="felt_primary_overall">
         <strong>{{ "整个对话中，红框中的人内心最可能感受到哪些主要情绪？" if lang == "cn" else "What was the primary emotion(s) the highlighted person likely FELT during the entire dialogue?" }}</strong>
       </label>
+      {% if lang == "cn" %}
+        <div class="hint">请使用中文回答。</div>
+      {% endif %}
       <textarea id="felt_primary_overall" name="felt_primary_overall" rows="3"
                 required></textarea>
 

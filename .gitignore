@@ -1,0 +1,8 @@
+.venv/
+.idea/
+__pycache__/
+*.py[cod]
+*.db
+.env
+.env.*
+flask_annotation/static/videos/

@@ -163,6 +163,16 @@ The administrator CSV export is available at:
 http://localhost:8000/admin/exports.csv
 ```
 
+The export's `media_mode` column identifies how each annotation run was
+presented:
+
+- `video`: video with audio (the default mode)
+- `audio`: paired audio visualization
+- `video_only`: silent video
+
+Runs created before the `media_mode` field was added have a blank value because
+their presentation mode was not stored.
+
 Back up the SQLite database before replacing or removing it. Separate browsers
 have separate task sessions, but multiple tabs in the same browser share one
 session and should not be used to annotate concurrently.

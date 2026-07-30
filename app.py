@@ -553,10 +553,19 @@ def create_app():
 
         g.db.execute(
             """
-            INSERT INTO runs(run_id, participant_id, video_id, target_side, created_at_utc)
-            VALUES(?,?,?,?,?)
+            INSERT INTO runs(
+                run_id, participant_id, video_id, target_side, media_mode, created_at_utc
+            )
+            VALUES(?,?,?,?,?,?)
             """,
-            (run_id, participant_id, assignment["video_id"], target_side, datetime.utcnow().isoformat()),
+            (
+                run_id,
+                participant_id,
+                assignment["video_id"],
+                target_side,
+                "audio" if audio_only else ("video_only" if video_only else "video"),
+                datetime.utcnow().isoformat(),
+            ),
         )
         g.db.commit()
 
@@ -1001,14 +1010,15 @@ def create_app():
         out = StringIO()
         w = csv.writer(out)
         w.writerow([
-            "run_id", "participant_id", "video_id", "target_side", "created_at_utc",
+            "run_id", "participant_id", "video_id", "target_side", "media_mode", "created_at_utc",
             "duration_sec", "n_segments", "demographics_json",
             "segment_idx", "ratings_json", "open_text",
             "post_json", "completion_code", "finished_at_utc"
         ])
         for r in rows:
             w.writerow([
-                r["run_id"], r["participant_id"], r["video_id"], r["target_side"], r["created_at_utc"],
+                r["run_id"], r["participant_id"], r["video_id"], r["target_side"],
+                r["media_mode"], r["created_at_utc"],
                 r["duration_sec"], r["n_segments"], r["demographics_json"],
                 r["segment_idx"], r["ratings_json"], r["open_text"],
                 r["post_json"], r["completion_code"], r["finished_at_utc"]
@@ -1242,6 +1252,7 @@ def init_db():
             participant_id TEXT,
             video_id TEXT,
             target_side TEXT,
+            media_mode TEXT,
             created_at_utc TEXT,
             duration_sec REAL,
             n_segments INTEGER,
@@ -1252,6 +1263,12 @@ def init_db():
         )
         """
     )
+
+    run_columns = {
+        row[1] for row in cur.execute("PRAGMA table_info(runs)").fetchall()
+    }
+    if "media_mode" not in run_columns:
+        cur.execute("ALTER TABLE runs ADD COLUMN media_mode TEXT")
 
     cur.execute(
         """

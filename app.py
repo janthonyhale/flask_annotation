@@ -4,6 +4,7 @@ import uuid
 import random
 import sqlite3
 import hashlib
+import hmac
 from datetime import datetime
 from urllib.parse import urlparse, parse_qs, unquote
 
@@ -152,7 +153,7 @@ def load_audio_pool_from_config() -> list[dict]:
     """Load paired conversation channels from audio_sources.txt.
 
     Format:
-    conversation_id,buyer_url,seller_url,buyer_offset_ms,seller_offset_ms
+    conversation_id,buyer_url,seller_url,buyer_offset_ms,seller_offset_ms[,composite_source]
     """
     if not os.path.isfile(AUDIO_LIST_PATH):
         return []
@@ -165,11 +166,11 @@ def load_audio_pool_from_config() -> list[dict]:
             if not line or line.startswith("#"):
                 continue
             parts = [part.strip() for part in line.split(",")]
-            if len(parts) != 5 or not all(parts[:3]):
+            if len(parts) not in (5, 6) or not all(parts[:3]):
                 raise ValueError(
                     f"Invalid audio source on line {line_number}: expected "
                     "conversation_id,buyer_url,seller_url,"
-                    "buyer_offset_ms,seller_offset_ms"
+                    "buyer_offset_ms,seller_offset_ms[,composite_source]"
                 )
             try:
                 buyer_offset_ms = max(0, int(parts[3]))
@@ -182,13 +183,23 @@ def load_audio_pool_from_config() -> list[dict]:
             if conversation_id in seen_ids:
                 raise ValueError(f"Duplicate audio conversation ID: {conversation_id}")
             seen_ids.add(conversation_id)
-            pool.append({
+            entry = {
                 "video_id": conversation_id,
                 "audio_channel_1_url": parts[1],
                 "audio_channel_2_url": parts[2],
                 "buyer_offset_ms": buyer_offset_ms,
                 "seller_offset_ms": seller_offset_ms,
-            })
+            }
+            if len(parts) == 6 and parts[5]:
+                composite = parse_video_source_line(parts[5], line_number)
+                if composite:
+                    entry.update({
+                        "audio_master_url": composite.get("url"),
+                        "audio_master_s3_bucket": composite.get("s3_bucket"),
+                        "audio_master_s3_key": composite.get("s3_key"),
+                        "audio_master_path": composite.get("path"),
+                    })
+            pool.append(entry)
     return pool
 
 
@@ -541,6 +552,10 @@ def create_app():
         session["video_path"] = assignment.get("path")
         session["audio_channel_1_url"] = assignment.get("audio_channel_1_url")
         session["audio_channel_2_url"] = assignment.get("audio_channel_2_url")
+        session["audio_master_url"] = assignment.get("audio_master_url")
+        session["audio_master_s3_bucket"] = assignment.get("audio_master_s3_bucket")
+        session["audio_master_s3_key"] = assignment.get("audio_master_s3_key")
+        session["audio_master_path"] = assignment.get("audio_master_path")
         session["buyer_offset_ms"] = assignment.get("buyer_offset_ms", 0)
         session["seller_offset_ms"] = assignment.get("seller_offset_ms", 0)
         session["audio_only"] = audio_only
@@ -620,9 +635,23 @@ def create_app():
         grew_up_state = request.form.get("grew_up_state", "").strip()
         grew_up_province = request.form.get("grew_up_province", "").strip()
         grew_up_region = request.form.get("grew_up_region", "").strip()
+        gender = request.form.get("gender", "").strip()
+        native_language = request.form.get("native_language", "").strip()
+
+        if gender not in GENDERS or grew_up_region not in REGIONS or not native_language:
+            return render_template(
+                "demographics.html",
+                regions=REGIONS,
+                genders=GENDERS,
+                us_states=US_STATES,
+                china_provinces=CHINA_PROVINCES,
+                lang=get_lang(),
+                error=("请填写所有必填字段。" if get_lang() == "cn" else "Please complete all required fields."),
+            )
+
         grew_up_detail = grew_up_state if grew_up_region == "United States" else (grew_up_province if grew_up_region == "China" else "")
 
-        if grew_up_region == "United States" and not grew_up_state:
+        if grew_up_region == "United States" and grew_up_state not in US_STATES:
             return render_template(
                 "demographics.html",
                 regions=REGIONS,
@@ -633,7 +662,7 @@ def create_app():
                 error=("请选择一个美国州。" if get_lang() == "cn" else "Please select a U.S. state."),
             )
 
-        if grew_up_region == "China" and not grew_up_province:
+        if grew_up_region == "China" and grew_up_province not in CHINA_PROVINCES:
             return render_template(
                 "demographics.html",
                 regions=REGIONS,
@@ -645,13 +674,13 @@ def create_app():
             )
         payload = {
             "age": age,
-            "gender": request.form.get("gender", "").strip(),
+            "gender": gender,
             "grew_up_region": grew_up_region,
             "grew_up_state": grew_up_state,
             "grew_up_province": grew_up_province,
             # Backward-compatible alias for previous exports/consumers
             "grew_up_detail": grew_up_detail,
-            "native_language": request.form.get("native_language", "").strip(),
+            "native_language": native_language,
         }
 
         g.db.execute(
@@ -678,7 +707,21 @@ def create_app():
         segment_start_sec, segment_end_sec = get_segment_bounds(segment_idx, duration_sec)
 
         video_url = None
-        if not audio_only:
+        audio_master_url = None
+        if audio_only and (
+            session.get("audio_master_url")
+            or session.get("audio_master_s3_key")
+            or session.get("audio_master_path")
+        ):
+            audio_master_url = resolve_video_source(
+                {
+                    "url": session.get("audio_master_url"),
+                    "s3_bucket": session.get("audio_master_s3_bucket"),
+                    "s3_key": session.get("audio_master_s3_key"),
+                    "path": session.get("audio_master_path"),
+                }
+            )
+        elif not audio_only:
             video_url = resolve_video_source(
                 {
                     "url": session.get("video_source_url"),
@@ -707,6 +750,7 @@ def create_app():
             audio_only=audio_only,
             audio_channel_1_url=session.get("audio_channel_1_url"),
             audio_channel_2_url=session.get("audio_channel_2_url"),
+            audio_master_url=audio_master_url,
             buyer_offset_ms=session.get("buyer_offset_ms", 0),
             seller_offset_ms=session.get("seller_offset_ms", 0),
             lang=get_lang(),
@@ -716,8 +760,14 @@ def create_app():
     def init_video():
         ensure_session()
         duration = request.form.get("duration_sec", type=float)
-        if duration is None or duration <= 0:
+        if duration is None or not math.isfinite(duration) or duration <= 0:
             abort(400, "Invalid duration")
+
+        stored_duration = session.get("duration_sec")
+        if stored_duration is not None:
+            if not math.isclose(float(stored_duration), float(duration), abs_tol=0.5):
+                abort(409, "Media duration was already initialized")
+            return ("OK", 200)
 
         n_segments = compute_n_segments(float(duration))
         session["duration_sec"] = float(duration)
@@ -737,15 +787,30 @@ def create_app():
         audio_only = bool(session.get("audio_only", False))
         video_only = bool(session.get("video_only", False)) and not audio_only
         run_id = session["run_id"]
-        segment_idx = int(request.form.get("segment_idx", -1))
+        try:
+            segment_idx = int(request.form.get("segment_idx", -1))
+        except (TypeError, ValueError):
+            abort(400, "Invalid segment_idx")
         if segment_idx < 0:
             abort(400, "Missing segment_idx")
 
         current_segment_idx = int(session.get("segment_idx", 0))
         if segment_idx != current_segment_idx:
-            segment_idx = current_segment_idx
+            abort(409, "This segment has already been submitted or is out of sequence")
 
         n_segments = session.get("n_segments")
+        if n_segments is None:
+            duration = request.form.get("media_duration_sec", type=float)
+            if duration is None or not math.isfinite(duration) or duration <= 0:
+                abort(409, "Media duration has not been initialized; reload the task and try again")
+            n_segments = compute_n_segments(duration)
+            session["duration_sec"] = duration
+            session["n_segments"] = n_segments
+            g.db.execute(
+                "UPDATE runs SET duration_sec=?, n_segments=? WHERE run_id=?",
+                (duration, n_segments, run_id),
+            )
+            g.db.commit()
         if n_segments is not None and segment_idx >= int(n_segments):
             return redirect(url_for("post_dialog", lang=get_lang()))
 
@@ -787,9 +852,25 @@ def create_app():
             or dispute_outcome_prediction == ""
             or not moved_outcome_ok
             or felt_primary == ""
+            or any(not valid_rating(exp_ratings[k], 1, 7) for k, _ in exp_items)
+            or not valid_rating(dispute_outcome_prediction, 1, 7)
         ):
             video_url = None
-            if not audio_only:
+            audio_master_url = None
+            if audio_only and (
+                session.get("audio_master_url")
+                or session.get("audio_master_s3_key")
+                or session.get("audio_master_path")
+            ):
+                audio_master_url = resolve_video_source(
+                    {
+                        "url": session.get("audio_master_url"),
+                        "s3_bucket": session.get("audio_master_s3_bucket"),
+                        "s3_key": session.get("audio_master_s3_key"),
+                        "path": session.get("audio_master_path"),
+                    }
+                )
+            elif not audio_only:
                 video_url = resolve_video_source(
                     {
                         "url": session.get("video_source_url"),
@@ -819,33 +900,38 @@ def create_app():
                 audio_only=audio_only,
                 audio_channel_1_url=session.get("audio_channel_1_url"),
                 audio_channel_2_url=session.get("audio_channel_2_url"),
+                audio_master_url=audio_master_url,
                 buyer_offset_ms=session.get("buyer_offset_ms", 0),
                 seller_offset_ms=session.get("seller_offset_ms", 0),
                 lang=get_lang(),
                 error=("请回答所有片段问题，至少拖动每个滑块一次，并填写该片段最主要的内心情绪后再继续。" if get_lang() == "cn" else "Please answer all segment questions, move every slider at least once, and provide your primary felt emotion(s) before continuing."),
             )
 
-        g.db.execute(
-            """
-            INSERT INTO segment_annotations(
-                run_id, segment_idx, ratings_json, open_text, created_at_utc
-            ) VALUES (?,?,?,?,?)
-            """,
-            (
-                run_id,
-                segment_idx,
-                json_dumps({
-                    "target_emotions": ratings,
-                    "expressed_items": exp_ratings,
-                    "dispute_outcome_prediction": dispute_outcome_prediction,
-                    "felt_primary": felt_primary,
-                    "notes": open_text,
-                }),
-                open_text,
-                datetime.utcnow().isoformat(),
-            ),
-        )
-        g.db.commit()
+        try:
+            g.db.execute(
+                """
+                INSERT INTO segment_annotations(
+                    run_id, segment_idx, ratings_json, open_text, created_at_utc
+                ) VALUES (?,?,?,?,?)
+                """,
+                (
+                    run_id,
+                    segment_idx,
+                    json_dumps({
+                        "target_emotions": ratings,
+                        "expressed_items": exp_ratings,
+                        "dispute_outcome_prediction": dispute_outcome_prediction,
+                        "felt_primary": felt_primary,
+                        "notes": open_text,
+                    }),
+                    open_text,
+                    datetime.utcnow().isoformat(),
+                ),
+            )
+            g.db.commit()
+        except sqlite3.IntegrityError:
+            g.db.rollback()
+            abort(409, "This segment has already been submitted")
 
         next_segment_idx = segment_idx + 1
         session["segment_idx"] = next_segment_idx
@@ -858,6 +944,8 @@ def create_app():
     @app.get("/post_dialog")
     def post_dialog():
         ensure_session()
+        if not run_has_all_segments(g.db, session):
+            return redirect(url_for("task", lang=get_lang()))
         return render_template(
             "post.html",
             emotions=EMOTIONS,
@@ -873,6 +961,8 @@ def create_app():
     @app.post("/post_dialog")
     def post_dialog_post():
         ensure_session()
+        if not run_has_all_segments(g.db, session):
+            abort(409, "Complete all segments before submitting the final questionnaire")
         run_id = session["run_id"]
 
         overall_items = [
@@ -907,7 +997,21 @@ def create_app():
         origin_state = request.form.get("origin_state", "").strip()
         origin_province = request.form.get("origin_province", "").strip()
 
-        if origin_region == "United States" and not origin_state:
+        if origin_region not in REGIONS:
+            return render_template(
+                "post.html",
+                emotions=EMOTIONS,
+                regions=REGIONS,
+                us_states=US_STATES,
+                china_provinces=CHINA_PROVINCES,
+                svi_facets=SVI_FACETS[get_lang()],
+                post_scenario_facets=POST_SCENARIO_FACETS[get_lang()],
+                lang=get_lang(),
+                target_side=session["target_side"],
+                error=("请选择来源国家。" if get_lang() == "cn" else "Please select an origin country."),
+            )
+
+        if origin_region == "United States" and origin_state not in US_STATES:
             return render_template(
                 "post.html",
                 emotions=EMOTIONS,
@@ -921,7 +1025,7 @@ def create_app():
                 error=("请选择一个美国州。" if get_lang() == "cn" else "Please select a U.S. state."),
             )
 
-        if origin_region == "China" and not origin_province:
+        if origin_region == "China" and origin_province not in CHINA_PROVINCES:
             return render_template(
                 "post.html",
                 emotions=EMOTIONS,
@@ -952,6 +1056,9 @@ def create_app():
             or not moved_svi_ok
             or any(post_scenario[k] == "" for k, _, _, _ in POST_SCENARIO_FACETS[get_lang()])
             or not moved_post_scenario_ok
+            or any(not valid_rating(overall[k], 1, 7) for k, _ in overall_items)
+            or any(not valid_rating(svi[k], 1, 7) for k, _ in SVI_FACETS[get_lang()])
+            or any(not valid_rating(post_scenario[k], 1, 5) for k, _, _, _ in POST_SCENARIO_FACETS[get_lang()])
         ):
             return render_template(
                 "post.html",
@@ -990,10 +1097,23 @@ def create_app():
         run_id = session["run_id"]
         row = g.db.execute("SELECT completion_code FROM runs WHERE run_id=?", (run_id,)).fetchone()
         code = row["completion_code"] if row else None
+        if not code:
+            return redirect(url_for("post_dialog", lang=get_lang()))
         return render_template("done.html", code=code, lang=get_lang())
 
     @app.get("/admin/exports.csv")
     def export_csv():
+        configured_token = os.environ.get("ADMIN_EXPORT_TOKEN", "")
+        supplied_token = request.headers.get("Authorization", "")
+        if supplied_token.startswith("Bearer "):
+            supplied_token = supplied_token.removeprefix("Bearer ").strip()
+        else:
+            supplied_token = ""
+        if not configured_token:
+            abort(503, "CSV export is disabled until ADMIN_EXPORT_TOKEN is configured")
+        if not supplied_token or not hmac.compare_digest(supplied_token, configured_token):
+            abort(401, "A valid bearer token is required")
+
         rows = g.db.execute(
             """
             SELECT r.*, sa.segment_idx, sa.ratings_json, sa.open_text
@@ -1161,6 +1281,29 @@ def parse_bool_param(raw) -> bool:
     return str(raw or "").strip().lower() in {"1", "true", "yes", "on"}
 
 
+def valid_rating(raw: str, minimum: int, maximum: int) -> bool:
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        return False
+    return str(value) == str(raw).strip() and minimum <= value <= maximum
+
+
+def run_has_all_segments(db, current_session) -> bool:
+    n_segments = current_session.get("n_segments")
+    if n_segments is None or int(n_segments) <= 0:
+        return False
+    row = db.execute(
+        """
+        SELECT COUNT(DISTINCT segment_idx) AS cnt
+        FROM segment_annotations
+        WHERE run_id=? AND segment_idx >= 0 AND segment_idx < ?
+        """,
+        (current_session["run_id"], int(n_segments)),
+    ).fetchone()
+    return int(row["cnt"]) >= int(n_segments)
+
+
 def choose_video_assignment(db, participant_id: str, video_pool: list[dict], target_minutes=None) -> tuple[dict, str]:
     pair_counts = {
         (row["video_id"], row["target_side"]): int(row["cnt"])
@@ -1284,6 +1427,24 @@ def init_db():
         """
     )
 
+    # Old clients could submit the same segment more than once. Keep the first
+    # response for each run/segment before enforcing the invariant.
+    cur.execute(
+        """
+        DELETE FROM segment_annotations
+        WHERE id NOT IN (
+            SELECT MIN(id) FROM segment_annotations GROUP BY run_id, segment_idx
+        )
+        """
+    )
+    cur.execute(
+        """
+        CREATE UNIQUE INDEX IF NOT EXISTS
+        idx_segment_annotations_run_segment
+        ON segment_annotations(run_id, segment_idx)
+        """
+    )
+
     conn.commit()
     conn.close()
 
@@ -1309,4 +1470,9 @@ def json_dumps(obj) -> str:
 if __name__ == "__main__":
     app = create_app()
     # threaded=True helps local dev handle multiple participants concurrently.
-    app.run(host="0.0.0.0", port=8000, debug=True, threaded=True)
+    app.run(
+        host=os.environ.get("FLASK_HOST", "127.0.0.1"),
+        port=int(os.environ.get("FLASK_PORT", "8000")),
+        debug=parse_bool_param(os.environ.get("FLASK_DEBUG")),
+        threaded=True,
+    )

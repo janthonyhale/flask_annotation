@@ -80,8 +80,11 @@
         <div class="video-wrap" style="position:relative;">
           {% if audio_only %}
             <canvas id="audioCanvas" class="audio-visualizer"></canvas>
-            <audio id="vid" preload="metadata" crossorigin="anonymous" src="{{ audio_channel_2_url }}"></audio>
-            <audio id="audioChannel1" preload="metadata" crossorigin="anonymous" src="{{ audio_channel_1_url }}"></audio>
+            <audio id="vid" preload="auto"{% if not audio_master_url %} crossorigin="anonymous"{% endif %} src="{{ audio_master_url or audio_channel_2_url }}"></audio>
+            <audio id="audioChannel1" preload="auto" crossorigin="anonymous" src="{{ audio_channel_1_url }}"></audio>
+            {% if audio_master_url %}
+              <audio id="audioChannel2" preload="auto" crossorigin="anonymous" src="{{ audio_channel_2_url }}"></audio>
+            {% endif %}
           {% else %}
             <video id="vid" preload="metadata" playsinline{% if video_only %} muted{% endif %}>
               <source src="{{ video_path }}" type="{{ video_mime }}">
@@ -123,6 +126,7 @@
         <form id="segmentForm" method="post" action="{{ url_for('submit_segment') }}">
           <input type="hidden" name="lang" value="{{ lang }}">
           <input type="hidden" name="segment_idx" value="{{ segment_idx }}">
+          <input type="hidden" id="mediaDurationSec" name="media_duration_sec" value="">
           <h2>{{ "请判断红框中的人在这 1 分钟内表现出的情绪" if lang == "cn" else "Indicate what emotion the highlighted person expressed in this 1-minute segment" }}</h2>
 
           <div class="slider-grid">
@@ -199,6 +203,8 @@
   const endTimeLabel = document.getElementById("endTimeLabel");
   const pauseOverlay = document.getElementById("pauseOverlay");
   const audioChannel1 = document.getElementById("audioChannel1");
+  const audioChannel2 = document.getElementById("audioChannel2");
+  const hasCompositeMaster = audioOnly && !!audioChannel2;
   const audioCanvas = document.getElementById("audioCanvas");
   let sentVideoInit = false;
   let audioContext = null;
@@ -229,6 +235,24 @@
 
   function getAudioTimelineTime() {
     if (!audioTimelinePlaying) return audioTimelinePosition;
+
+    if (hasCompositeMaster && vid && !vid.paused && !vid.ended) {
+      return Math.min(audioConversationEnd, vid.currentTime);
+    }
+
+    // Follow media playback rather than wall-clock time. A remote WAV may need
+    // time to buffer after play() is called; counting that wait as playback
+    // would make the application timeline run ahead of the sound.
+    const playingTimes = [];
+    if (audioChannel1 && !audioChannel1.paused && !audioChannel1.ended) {
+      playingTimes.push(buyerOffsetSeconds + audioChannel1.currentTime);
+    }
+    if (vid && !vid.paused && !vid.ended) {
+      playingTimes.push(sellerOffsetSeconds + vid.currentTime);
+    }
+    if (playingTimes.length) return Math.min(audioConversationEnd, Math.max(...playingTimes));
+
+    // Briefly fall back to elapsed time while a scheduled channel is starting.
     const elapsed = (performance.now() - audioTimelineStartedAt) / 1000;
     return Math.min(audioConversationEnd, audioTimelinePosition + elapsed);
   }
@@ -252,32 +276,65 @@
       Math.min(timelineSeconds, audioConversationEnd || timelineSeconds)
     );
     placeAudioChannel(audioChannel1, buyerOffsetSeconds, audioTimelinePosition);
-    placeAudioChannel(vid, sellerOffsetSeconds, audioTimelinePosition);
+    if (hasCompositeMaster) {
+      placeAudioChannel(audioChannel2, 0, audioTimelinePosition);
+      placeAudioChannel(vid, 0, audioTimelinePosition);
+    } else {
+      placeAudioChannel(vid, sellerOffsetSeconds, audioTimelinePosition);
+    }
   }
 
-  function scheduleAudioChannel(media, offsetSeconds) {
+  function prepareAudioChannel(media, offsetSeconds) {
     const localTime = audioTimelinePosition - offsetSeconds;
-    if (localTime >= media.duration) return;
+    if (localTime >= media.duration) return null;
     if (localTime >= 0) {
       media.currentTime = localTime;
-      media.play().catch(() => {});
-      return;
+      return { media, offsetSeconds, delaySeconds: 0 };
     }
     media.currentTime = 0;
-    const timer = setTimeout(() => {
-      if (audioTimelinePlaying) media.play().catch(() => {});
-    }, -localTime * 1000);
-    audioStartTimers.push(timer);
+    return { media, offsetSeconds, delaySeconds: -localTime };
   }
 
   async function startAudioTimeline() {
     clearAudioStartTimers();
-    audioTimelineStartedAt = performance.now();
     audioTimelinePlaying = true;
-    scheduleAudioChannel(audioChannel1, buyerOffsetSeconds);
-    scheduleAudioChannel(vid, sellerOffsetSeconds);
+    const channels = hasCompositeMaster
+      ? [
+          prepareAudioChannel(vid, 0),
+          prepareAudioChannel(audioChannel1, 0),
+          prepareAudioChannel(audioChannel2, 0),
+        ].filter(Boolean)
+      : [
+          prepareAudioChannel(audioChannel1, buyerOffsetSeconds),
+          prepareAudioChannel(vid, sellerOffsetSeconds),
+        ].filter(Boolean);
+    const immediateChannels = channels.filter(channel => channel.delaySeconds === 0);
+
+    // A zero-offset channel always exists in valid source data. Wait until its
+    // play request succeeds before starting the shared clock and delay timers.
+    await Promise.allSettled(
+      immediateChannels.map(channel => channel.media.play())
+    );
+    if (!audioTimelinePlaying) return;
+
+    audioTimelineStartedAt = performance.now();
+    const actualTimeline = getAudioTimelineTime();
+    channels.filter(channel => channel.delaySeconds > 0).forEach(channel => {
+      const remainingDelay = Math.max(0, channel.offsetSeconds - actualTimeline);
+      const timer = setTimeout(() => {
+        if (audioTimelinePlaying) channel.media.play().catch(() => {});
+      }, remainingDelay * 1000);
+      audioStartTimers.push(timer);
+    });
     const tick = () => {
       if (!audioTimelinePlaying) return;
+      if (hasCompositeMaster && !vid.paused) {
+        [audioChannel1, audioChannel2].forEach(channel => {
+          if (channel && !channel.paused && Math.abs(channel.currentTime - vid.currentTime) > 0.15) {
+            channel.currentTime = Math.min(vid.currentTime, channel.duration || vid.currentTime);
+          }
+        });
+      }
       updatePlaybackProgress();
       requestAnimationFrame(tick);
     };
@@ -290,6 +347,7 @@
     audioTimelinePlaying = false;
     clearAudioStartTimers();
     audioChannel1.pause();
+    if (audioChannel2) audioChannel2.pause();
     vid.pause();
   }
 
@@ -304,11 +362,15 @@
       channel1Analyser.fftSize = 512;
       channel2Analyser.fftSize = 512;
       const channel1Source = audioContext.createMediaElementSource(audioChannel1);
-      const channel2Source = audioContext.createMediaElementSource(vid);
+      const channel2Source = audioContext.createMediaElementSource(audioChannel2 || vid);
+      const channel1Mute = audioContext.createGain();
+      const channel2Mute = audioContext.createGain();
+      channel1Mute.gain.value = hasCompositeMaster ? 0 : 1;
+      channel2Mute.gain.value = hasCompositeMaster ? 0 : 1;
       channel1Source.connect(channel1Analyser);
       channel2Source.connect(channel2Analyser);
-      channel1Analyser.connect(audioContext.destination);
-      channel2Analyser.connect(audioContext.destination);
+      channel1Analyser.connect(channel1Mute).connect(audioContext.destination);
+      channel2Analyser.connect(channel2Mute).connect(audioContext.destination);
     } catch (error) {
       console.warn("Audio visualization unavailable:", error);
     }
@@ -507,10 +569,13 @@
     await Promise.all([
       waitForMetadata(vid),
       audioOnly ? waitForMetadata(audioChannel1) : Promise.resolve(),
+      audioOnly && audioChannel2 ? waitForMetadata(audioChannel2) : Promise.resolve(),
     ]);
 
     initialized = true;
-    const mediaDuration = audioOnly
+    const mediaDuration = hasCompositeMaster
+      ? vid.duration
+      : audioOnly
       ? Math.max(
           sellerOffsetSeconds + vid.duration,
           buyerOffsetSeconds + audioChannel1.duration
@@ -519,6 +584,8 @@
     if (audioOnly) audioConversationEnd = mediaDuration;
 
     if (!sentVideoInit && isFinite(mediaDuration) && mediaDuration > 0) {
+      const mediaDurationInput = document.getElementById("mediaDurationSec");
+      if (mediaDurationInput) mediaDurationInput.value = String(mediaDuration);
       sentVideoInit = true;
       const data = new URLSearchParams();
       data.set("duration_sec", String(mediaDuration));
@@ -628,6 +695,7 @@
 
   vid.addEventListener("timeupdate", updatePlaybackProgress);
   if (audioChannel1) audioChannel1.addEventListener("timeupdate", updatePlaybackProgress);
+  if (audioChannel2) audioChannel2.addEventListener("timeupdate", updatePlaybackProgress);
 
   // Init metadata early so top "?" becomes N (but does NOT autoplay)
   ensureMetadata();

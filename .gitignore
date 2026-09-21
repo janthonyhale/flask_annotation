@@ -3,6 +3,7 @@
 __pycache__/
 *.py[cod]
 *.db
+annotations.csv
 .env
 .env.*
 static/videos/

@@ -1,10 +1,52 @@
 # Paired audio conversations used when the task starts with ?audio_only=true.
 #
 # Format:
-# conversation_id,buyer_url,seller_url,buyer_offset_ms,seller_offset_ms
+# conversation_id,buyer_url,seller_url,buyer_offset_ms,seller_offset_ms,composite_source
 #
 # The buyer is shown on the left; the seller is shown on the right.
-# Each offset places that channel on the shared conversation timeline.
+# The composite is the audible timing master, matching the original video
+# annotations exactly. The WAVs feed the separate buyer/seller visualization
+# silently; their legacy offsets are retained for five-column fallback entries.
+#
+# Every active session below has exactly five completed left/buyer and five
+# completed right/seller annotations for its corresponding composite video.
+# Comment out individual source lines, or an entire length section, as needed.
 
-#session_1_group_8,https://kodis-audio.s3.us-west-1.amazonaws.com/4c925866f64090c74b43479a3bebb450_session-1_group-8__uid_s_1__uid_e_av.wav,https://kodis-audio.s3.us-west-1.amazonaws.com/4c925866f64090c74b43479a3bebb450_session-1_group-8__uid_s_2__uid_e_av.wav,2560,0
-session-2_group-187,https://kodis-audio.s3.us-west-1.amazonaws.com/b8697a5fce4edd7ed4f88588f922f272_session-2_group-187__uid_s_1__uid_e_av.wav,https://kodis-audio.s3.us-west-1.amazonaws.com/b8697a5fce4edd7ed4f88588f922f272_session-2_group-187__uid_s_2__uid_e_av.wav,0,6380
+# -----------------------------------------------------------------------------
+# SHORT: 5 minutes or less (5 sessions)
+# Approximate TOA call durations: 1.47, 3.02, 3.40, 3.42, and 4.13 minutes.
+# -----------------------------------------------------------------------------
+#session-2_group-223,https://kodis-audio.s3.us-west-1.amazonaws.com/6a739539484725790be36bb0a7152241_session-2_group-223__uid_s_1__uid_e_av.wav,https://kodis-audio.s3.us-west-1.amazonaws.com/6a739539484725790be36bb0a7152241_session-2_group-223__uid_s_2__uid_e_av.wav,1460,0,s3://kodis-video/d868b156bc44ff0c8b140fb04f339de3_session-2_group-223_0.mp4
+#session-2_group-335,https://kodis-audio.s3.us-west-1.amazonaws.com/76953e36594d0956a2378892c10a7381_session-2_group-335__uid_s_1__uid_e_av.wav,https://kodis-audio.s3.us-west-1.amazonaws.com/76953e36594d0956a2378892c10a7381_session-2_group-335__uid_s_2__uid_e_av.wav,0,1010,s3://kodis-video/690a54dcfe4ca4ba997297b4df42fb75_session-2_group-335_0.mp4
+#session-2_group-351,https://kodis-audio.s3.us-west-1.amazonaws.com/5afebd6e10439980a4a8d786492965f5_session-2_group-351__uid_s_1__uid_e_av.wav,https://kodis-audio.s3.us-west-1.amazonaws.com/5afebd6e10439980a4a8d786492965f5_session-2_group-351__uid_s_2__uid_e_av.wav,3020,0,s3://kodis-video/0c4f78a0ca48967d8f78e0ad01e885d8_session-2_group-351_0.mp4
+#session-2_group-227,https://kodis-audio.s3.us-west-1.amazonaws.com/35d8c53cb049cb0c976b50a5659838d1_session-2_group-227__uid_s_1__uid_e_av.wav,https://kodis-audio.s3.us-west-1.amazonaws.com/35d8c53cb049cb0c976b50a5659838d1_session-2_group-227__uid_s_2__uid_e_av.wav,1620,0,s3://kodis-video/123ca1a46f4f1e462ff8759584e12305_session-2_group-227_0.mp4
+#session-2_group-219,https://kodis-audio.s3.us-west-1.amazonaws.com/cafc709980488121e2b056ab4ffd7d8b_session-2_group-219__uid_s_1__uid_e_av.wav,https://kodis-audio.s3.us-west-1.amazonaws.com/cafc709980488121e2b056ab4ffd7d8b_session-2_group-219__uid_s_2__uid_e_av.wav,0,3130,s3://kodis-video/ab07d83a05476778641b2ea803802dc0_session-2_group-219_0.mp4
+
+# -----------------------------------------------------------------------------
+# MEDIUM: about 6-12 minutes (11 sessions)
+# Approximate TOA call durations: 5.75, 6.18, 6.55, 6.82, 7.38, 7.67, 8.42,
+# 8.70, 9.68, 9.93, and 11.60 minutes.
+# -----------------------------------------------------------------------------
+#session-2_group-271,https://kodis-audio.s3.us-west-1.amazonaws.com/5874fe6eb24eca9a7dd4bf9dba45756f_session-2_group-271__uid_s_1__uid_e_av.wav,https://kodis-audio.s3.us-west-1.amazonaws.com/5874fe6eb24eca9a7dd4bf9dba45756f_session-2_group-271__uid_s_2__uid_e_av.wav,0,5050,s3://kodis-video/910ecc57b547e4771cc3d4ab4071371f_session-2_group-271_0.mp4
+#session-2_group-295,https://kodis-audio.s3.us-west-1.amazonaws.com/63f82094c745687d8f948eab164b69f2_session-2_group-295__uid_s_1__uid_e_av.wav,https://kodis-audio.s3.us-west-1.amazonaws.com/63f82094c745687d8f948eab164b69f2_session-2_group-295__uid_s_2__uid_e_av.wav,0,1330,s3://kodis-video/b89696613949e1a1053c068379518ce2_session-2_group-295_0.mp4
+#session-2_group-332,https://kodis-audio.s3.us-west-1.amazonaws.com/a3469f6f0d46c4b64fcaf8b8b6bbb3ac_session-2_group-332__uid_s_1__uid_e_av.wav,https://kodis-audio.s3.us-west-1.amazonaws.com/a3469f6f0d46c4b64fcaf8b8b6bbb3ac_session-2_group-332__uid_s_2__uid_e_av.wav,160,0,s3://kodis-video/56eaf641dd4658693c1fa38c54c9347a_session-2_group-332_0.mp4
+#session-2_group-254,https://kodis-audio.s3.us-west-1.amazonaws.com/e4048e26cc452fadf830fc980aed2582_session-2_group-254__uid_s_1__uid_e_av.wav,https://kodis-audio.s3.us-west-1.amazonaws.com/e4048e26cc452fadf830fc980aed2582_session-2_group-254__uid_s_2__uid_e_av.wav,0,110,s3://kodis-video/c58dc8051f4a875431ca2a9b1ea7bcff_session-2_group-254_0.mp4
+#session-2_group-349,https://kodis-audio.s3.us-west-1.amazonaws.com/6fb0e14ae94c9bc50643d9885fd5886b_session-2_group-349__uid_s_1__uid_e_av.wav,https://kodis-audio.s3.us-west-1.amazonaws.com/6fb0e14ae94c9bc50643d9885fd5886b_session-2_group-349__uid_s_2__uid_e_av.wav,1620,0,s3://kodis-video/c714b0ce9548774325b08c9701c49d64_session-2_group-349_0.mp4
+#session-2_group-316,https://kodis-audio.s3.us-west-1.amazonaws.com/e19f1dc0f94333a71a381ca2592b3427_session-2_group-316__uid_s_1__uid_e_av.wav,https://kodis-audio.s3.us-west-1.amazonaws.com/e19f1dc0f94333a71a381ca2592b3427_session-2_group-316__uid_s_2__uid_e_av.wav,0,4650,s3://kodis-video/a103114ecc4da0105288369c0bcf0de9_session-2_group-316_0.mp4
+#session-2_group-29,https://kodis-audio.s3.us-west-1.amazonaws.com/4c9de66de2485911993ee4956dfee210_session-2_group-29__uid_s_1__uid_e_av.wav,https://kodis-audio.s3.us-west-1.amazonaws.com/4c9de66de2485911993ee4956dfee210_session-2_group-29__uid_s_2__uid_e_av.wav,0,661,s3://kodis-video/05dfde8c454205f40f2d6795e8f4c7e8_session-2_group-29_0.mp4
+#session-2_group-382,https://kodis-audio.s3.us-west-1.amazonaws.com/e8bd7460fa4bfafe6bfe398ff6fa3e08_session-2_group-382__uid_s_1__uid_e_av.wav,https://kodis-audio.s3.us-west-1.amazonaws.com/e8bd7460fa4bfafe6bfe398ff6fa3e08_session-2_group-382__uid_s_2__uid_e_av.wav,520,0,s3://kodis-video/ba5e3b29db463502126f3dab489b6117_session-2_group-382_0.mp4
+#session-2_group-260,https://kodis-audio.s3.us-west-1.amazonaws.com/87ab3171e540d6ee1c2d869997ecf08c_session-2_group-260__uid_s_1__uid_e_av.wav,https://kodis-audio.s3.us-west-1.amazonaws.com/87ab3171e540d6ee1c2d869997ecf08c_session-2_group-260__uid_s_2__uid_e_av.wav,190,0,s3://kodis-video/60e3cb010d41efe562dc2abe48dc6705_session-2_group-260_0.mp4
+#session-2_group-298,https://kodis-audio.s3.us-west-1.amazonaws.com/c5000a1186475ae02122e1974fb11e3b_session-2_group-298__uid_s_1__uid_e_av.wav,https://kodis-audio.s3.us-west-1.amazonaws.com/c5000a1186475ae02122e1974fb11e3b_session-2_group-298__uid_s_2__uid_e_av.wav,560,0,s3://kodis-video/2830b0e78a4485168652fea5f0c09a8d_session-2_group-298_0.mp4
+session-2_group-203,https://kodis-audio.s3.us-west-1.amazonaws.com/c209678c1941f442265901a668ad8e6a_session-2_group-203__uid_s_1__uid_e_av.wav,https://kodis-audio.s3.us-west-1.amazonaws.com/c209678c1941f442265901a668ad8e6a_session-2_group-203__uid_s_2__uid_e_av.wav,510,0,s3://kodis-video/4407b55f8b4952838ab3688dcee373ed_session-2_group-203_0.mp4
+
+# -----------------------------------------------------------------------------
+# LONG: about 13-15 minutes (4 sessions)
+# Approximate TOA call durations: 13.07, 14.10, 14.12, and 14.30 minutes.
+# -----------------------------------------------------------------------------
+#session-2_group-113,https://kodis-audio.s3.us-west-1.amazonaws.com/737ed4769240b3eeaef4e8bbce2f612d_session-2_group-113__uid_s_1__uid_e_av.wav,https://kodis-audio.s3.us-west-1.amazonaws.com/737ed4769240b3eeaef4e8bbce2f612d_session-2_group-113__uid_s_2__uid_e_av.wav,2970,0,s3://kodis-video/414ea66bd54d80d97dfc088791d91bdf_session-2_group-113_0.mp4
+#session-2_group-323,https://kodis-audio.s3.us-west-1.amazonaws.com/4727da4b0443e2144c1d4caff65b5926_session-2_group-323__uid_s_1__uid_e_av.wav,https://kodis-audio.s3.us-west-1.amazonaws.com/4727da4b0443e2144c1d4caff65b5926_session-2_group-323__uid_s_2__uid_e_av.wav,280,0,s3://kodis-video/6ce280542d4d1ef6840fa19fe9aafa5c_session-2_group-323_0.mp4
+#session-2_group-381,https://kodis-audio.s3.us-west-1.amazonaws.com/4fa5e639bb44da88bf767baaabdff52a_session-2_group-381__uid_s_1__uid_e_av.wav,https://kodis-audio.s3.us-west-1.amazonaws.com/4fa5e639bb44da88bf767baaabdff52a_session-2_group-381__uid_s_2__uid_e_av.wav,0,340,s3://kodis-video/af376b3a784ec0cee8fd75939fb1478e_session-2_group-381_0.mp4
+#session-2_group-339,https://kodis-audio.s3.us-west-1.amazonaws.com/26dd4c18b242480faa7a05b8ef428265_session-2_group-339__uid_s_1__uid_e_av.wav,https://kodis-audio.s3.us-west-1.amazonaws.com/26dd4c18b242480faa7a05b8ef428265_session-2_group-339__uid_s_2__uid_e_av.wav,1330,0,s3://kodis-video/af45b063ce49b82e5e79388b1e30cf43_session-2_group-339_0.mp4
+
+# Previous local test source (not part of the selected 20):
+# session-2_group-187,https://kodis-audio.s3.us-west-1.amazonaws.com/b8697a5fce4edd7ed4f88588f922f272_session-2_group-187__uid_s_1__uid_e_av.wav,https://kodis-audio.s3.us-west-1.amazonaws.com/b8697a5fce4edd7ed4f88588f922f272_session-2_group-187__uid_s_2__uid_e_av.wav,0,6380,s3://kodis-video/e271be72f34da12d9a571bbc9cf48301_session-2_group-187_0.mp4
